@@ -5,6 +5,50 @@ Ein ESP32-basierter WLAN-Dongle, der sich als IP-Telefon bei der Fritz!Box
 die PhoneBlock-Datenbank prüft und erkannte Spammer wegschnappt, bevor die
 echten Telefone klingeln. Inbetriebnahme im Browser, keine Konfigurationsdatei.
 
+## Linux build and service
+
+The repository also contains a native Linux implementation for Raspberry Pi,
+NAS, and Debian-based home servers. It uses POSIX sockets, libcurl, OpenSSL,
+and the distribution cJSON library; ESP-IDF is not required for the Linux
+build.
+
+Install the build dependencies on Debian or Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y gcc make libcjson-dev libcurl4-openssl-dev libssl-dev
+```
+
+Build and test from the Linux checkout:
+
+```bash
+cd phoneblock-dongle/firmware/test
+make phoneblock_linux
+make test
+```
+
+The executable supports offline configuration checks and SIP diagnostics:
+
+```bash
+./phoneblock_linux --config /etc/phoneblock/dongle.conf --check-config
+./phoneblock_linux --config /etc/phoneblock/dongle.conf --probe-sip
+./phoneblock_linux --config /etc/phoneblock/dongle.conf --register-sip
+```
+
+The Debian package installs a systemd unit. Copy the example configuration,
+fill in the SIP credentials and PhoneBlock token, then enable the service:
+
+```bash
+sudo cp /etc/phoneblock/dongle.conf.example \
+  /etc/phoneblock/dongle.conf
+sudoedit /etc/phoneblock/dongle.conf
+sudo systemctl enable --now phoneblock-dongle
+```
+
+The Linux port currently targets UDP SIP, G.711 A-law RTP, and a single active
+call dialog. TCP/TLS SIP, full TR-064 provisioning, and the web dashboard are
+still separate follow-up work.
+
 ## Features im Überblick
 
 - **SIP-Client** (UDP), Registrar + eingehende INVITE/ACK/BYE/CANCEL,

@@ -9,10 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "esp_log.h"
-#include "esp_random.h"
 #include "esp_task_wdt.h"
-#include "esp_timer.h"
 #include "mbedtls/md5.h"
 #include "mbedtls/base64.h"
 
@@ -34,11 +31,16 @@
 #include "sip_srv.h"
 #include "rtp.h"
 #include "stats.h"
+#include "platform.h"
 
 // Must be last: bans unsafe string APIs for the rest of this file.
 #include "banned_apis.h"
 
 static const char *TAG = "sip";
+
+#define ESP_LOGI pb_log_info
+#define ESP_LOGW pb_log_warn
+#define ESP_LOGE pb_log_err
 
 // The local SIP port (bound + advertised) is configurable via
 // config_sip_local_port(); its default (15060) and rationale live in
@@ -158,7 +160,7 @@ static volatile bool s_reload_requested = false;
 // s_reload_requested by sip_register_request_reload(); cleared by the
 // task once it has consumed the delay.
 static volatile bool s_settle_pending  = false;
-static TaskHandle_t s_sip_task = NULL;
+static pb_task_t *s_sip_task = NULL;
 
 // Absolute deadline at which the registrar's binding for the last
 // successful REGISTER actually expires (us, esp_timer clock). Lets
@@ -244,7 +246,7 @@ static void random_hex(char *out, size_t hex_chars)
     static const char hex[] = "0123456789abcdef";
     size_t i = 0;
     while (i < hex_chars) {
-        uint32_t r = esp_random();
+        uint32_t r = pb_random_u32();
         for (int b = 0; b < 4 && i < hex_chars; b++) {
             out[i++] = hex[(r >> 4) & 0x0f];
             if (i < hex_chars) out[i++] = hex[r & 0x0f];
@@ -567,7 +569,7 @@ static int sip_send_recv(sip_ctx_t *c, const char *tx, int tx_len,
     // which made TLS spuriously report "no response" a few hundred ms
     // after sending even though the registrar answered. Keep looping on 0
     // and only give up once the deadline is actually reached.
-    int64_t deadline = esp_timer_get_time()
+    int64_t deadline = (int64_t)pb_monotonic_us()
                      + (int64_t)SIP_REGISTER_RECV_TIMEOUT_MS * 1000;
     int r = 0;
     for (;;) {
@@ -577,7 +579,7 @@ static int sip_send_recv(sip_ctx_t *c, const char *tx, int tx_len,
         // runs before esp_task_wdt_add()).
         if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
 
-        int64_t remaining_us = deadline - esp_timer_get_time();
+        int64_t remaining_us = deadline - (int64_t)pb_monotonic_us();
         if (remaining_us <= 0) {
             // INFO, not WARN: a single missed response is a routine
             // transient (it usually recovers on the next refresh while the
@@ -1153,7 +1155,7 @@ static void send_bye(sip_ctx_t *c)
     // resets the dialog to IDLE instead of lingering in BYE_SENT. A received
     // 200 (handle_incoming) supersedes this by memset-ing the dialog. The
     // preempt path in handle_invite also wipes it when a new call arrives.
-    d->bye_at_us = esp_timer_get_time() + SIP_TEARDOWN_TIMEOUT_US;
+    d->bye_at_us = (int64_t)pb_monotonic_us() + SIP_TEARDOWN_TIMEOUT_US;
 }
 
 // Extract the caller's number (user part of the From URI), normalize it
@@ -1415,7 +1417,7 @@ static void handle_invite(sip_ctx_t *c, const char *req, int req_len,
     send_response(c, from, req, req_len, 100, "Trying", d->our_tag, NULL);
     send_response(c, from, req, req_len, 180, "Ringing", d->our_tag, NULL);
     d->state = DIALOG_PROCEEDING;
-    d->bye_at_us = esp_timer_get_time() + SIP_DECLINE_DELAY_US;
+    d->bye_at_us = (int64_t)pb_monotonic_us() + SIP_DECLINE_DELAY_US;
 
     // Synchronous API check. Budget is ~500 ms–1 s; Fritz!Box waits longer
     // than that. Later this can move to a worker task if needed.
@@ -1433,7 +1435,7 @@ static void handle_invite(sip_ctx_t *c, const char *req, int req_len,
         // (handle_ack) supersedes it by moving to STREAMING and setting the
         // real post-tone BYE deadline; if no ACK ever arrives the main loop
         // BYEs and frees the slot instead of wedging it forever.
-        d->bye_at_us = esp_timer_get_time() + SIP_ACK_TIMEOUT_US;
+        d->bye_at_us = (int64_t)pb_monotonic_us() + SIP_ACK_TIMEOUT_US;
         ESP_LOGI(TAG, "SPAM → 200 OK sent, waiting for ACK to hang up");
     } else {
         // VERDICT_LEGITIMATE or VERDICT_ERROR → don't take the call, but don't
@@ -1478,7 +1480,7 @@ static void handle_ack(sip_ctx_t *c, const char *req, int req_len,
                 memcpy(srtp.key, d->srtp_tx_key, sizeof(srtp.key));
             }
             rtp_play_audio(&d->rtp_dest, &src, &srtp);   // task owns src now, closes it
-            d->bye_at_us = esp_timer_get_time() + duration_us + 200000LL;
+            d->bye_at_us = (int64_t)pb_monotonic_us() + duration_us + 200000LL;
             d->state = DIALOG_STREAMING;
         } else {
             announcement_close(&src);   // nothing to stream — release the handle
@@ -1674,7 +1676,7 @@ static void sip_task(void *arg)
     ctx.cseq = 1;
     random_hex(ctx.from_tag, 16);
 
-    uint32_t cid_rand = esp_random();
+    uint32_t cid_rand = pb_random_u32();
     snprintf(ctx.call_id, sizeof(ctx.call_id), "%08lx@phoneblock",
              (unsigned long)cid_rand);
 
@@ -1786,26 +1788,26 @@ static void sip_task(void *arg)
         ESP_LOGI(TAG, "REGISTERED as %s@%s (granted %d s, requested %d s)",
                  config_sip_user(), config_sip_host(),
                  granted_expires, config_sip_expires());
-        s_binding_expires_at_us = esp_timer_get_time()
+        s_binding_expires_at_us = (int64_t)pb_monotonic_us()
                                 + (int64_t)granted_expires * 1000000LL;
         s_pending_error[0] = '\0';
-        refresh_at_us = esp_timer_get_time() + (int64_t)(granted_expires / 2) * 1000000LL;
+        refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)(granted_expires / 2) * 1000000LL;
     } else {
         ESP_LOGE(TAG, "initial registration failed (%s), retry in %d s",
                  err[0] ? err : "no detail", retry_delay_s);
         s_binding_expires_at_us = 0;
         s_pending_error[0] = '\0';
-        refresh_at_us = esp_timer_get_time() + (int64_t)retry_delay_s * 1000000LL;
+        refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)retry_delay_s * 1000000LL;
     }
     // First keepalive one interval out; it self-reschedules in the loop and
     // stays active across reconnects/refreshes regardless of register state.
-    keepalive_at_us = esp_timer_get_time() + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
+    keepalive_at_us = (int64_t)pb_monotonic_us() + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
 
     rx = malloc(SIP_RX_BUF_SIZE);
     if (!rx) {
         ESP_LOGE(TAG, "malloc rx buffer failed — aborting SIP task");
         s_sip_task = NULL;
-        vTaskDelete(NULL);
+        return;
         return;
     }
 
@@ -1898,7 +1900,7 @@ static void sip_task(void *arg)
             r = do_register(&ctx, &granted_expires, err, sizeof(err));
             // Defer the idle keepalive (see reconnect path): this REGISTER
             // is fresh traffic, no need to ping right after it.
-            keepalive_at_us = esp_timer_get_time()
+            keepalive_at_us = (int64_t)pb_monotonic_us()
                             + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
             ok = (r == REGISTER_OK);
             s_registered = ok;
@@ -1906,16 +1908,16 @@ static void sip_task(void *arg)
             if (ok) {
                 ESP_LOGI(TAG, "re-REGISTERED after config change (granted %d s)",
                          granted_expires);
-                s_binding_expires_at_us = esp_timer_get_time()
+                s_binding_expires_at_us = (int64_t)pb_monotonic_us()
                                         + (int64_t)granted_expires * 1000000LL;
                 s_pending_error[0] = '\0';
-                refresh_at_us = esp_timer_get_time() + (int64_t)(granted_expires / 2) * 1000000LL;
+                refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)(granted_expires / 2) * 1000000LL;
             } else {
                 ESP_LOGE(TAG, "REGISTER with new config failed (%s), retry in %d s",
                          err[0] ? err : "no detail", retry_delay_s);
                 s_binding_expires_at_us = 0;
                 s_pending_error[0] = '\0';
-                refresh_at_us = esp_timer_get_time() + (int64_t)retry_delay_s * 1000000LL;
+                refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)retry_delay_s * 1000000LL;
             }
         }
 
@@ -1935,26 +1937,26 @@ static void sip_task(void *arg)
             // interval so we never ping a connection we just used — least
             // of all a freshly reconnected one, where an immediate ping
             // only draws a lone-CRLF pong with nothing to keep alive.
-            keepalive_at_us = esp_timer_get_time()
+            keepalive_at_us = (int64_t)pb_monotonic_us()
                             + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
             ok = (r == REGISTER_OK);
             s_registered = ok;
             stats_record_sip_state(ok);
             if (ok) {
-                s_binding_expires_at_us = esp_timer_get_time()
+                s_binding_expires_at_us = (int64_t)pb_monotonic_us()
                                         + (int64_t)granted_expires * 1000000LL;
                 s_pending_error[0] = '\0';
-                refresh_at_us = esp_timer_get_time() + (int64_t)(granted_expires / 2) * 1000000LL;
+                refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)(granted_expires / 2) * 1000000LL;
             } else {
                 ESP_LOGE(TAG, "re-REGISTER after reconnect failed (%s), retry in %d s",
                          err[0] ? err : "no detail", retry_delay_s);
                 s_binding_expires_at_us = 0;
                 s_pending_error[0] = '\0';
-                refresh_at_us = esp_timer_get_time() + (int64_t)retry_delay_s * 1000000LL;
+                refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)retry_delay_s * 1000000LL;
             }
         }
 
-        int64_t now = esp_timer_get_time();
+        int64_t now = (int64_t)pb_monotonic_us();
         // Next wake-up: whichever of {REGISTER refresh, BYE-after-stream}
         // is sooner. bye_at_us == 0 disables that deadline.
         int64_t deadline = refresh_at_us;
@@ -1977,7 +1979,7 @@ static void sip_task(void *arg)
         }
 
         if (n == 0) {
-            now = esp_timer_get_time();
+            now = (int64_t)pb_monotonic_us();
             // BYE deadline first — the dialog is still active and needs
             // tearing down before anything else.
             if (ctx.dialog.bye_at_us && now >= ctx.dialog.bye_at_us) {
@@ -2040,7 +2042,7 @@ static void sip_task(void *arg)
             // surface as a single dashboard entry.
             err[0] = '\0';
             r = do_register(&ctx, &granted_expires, err, sizeof(err));
-            now = esp_timer_get_time();
+            now = (int64_t)pb_monotonic_us();
             // Defer the idle keepalive (see reconnect path): the refresh
             // REGISTER is traffic, so the next ping is a full interval out.
             keepalive_at_us = now + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
@@ -2147,5 +2149,6 @@ void sip_register_start(void)
     // stacked on top of the SIP parser. 8 KB was within ~1 KB of the limit
     // and overflowed in the field (crash-reports/1.0.9). If the API call ever
     // moves into a dedicated worker, this can come back down.
-    xTaskCreate(sip_task, "sip_register", 12288, NULL, 5, &s_sip_task);
+    s_sip_task = pb_task_create(sip_task, NULL, "sip_register",
+                                12288 * sizeof(uint32_t));
 }

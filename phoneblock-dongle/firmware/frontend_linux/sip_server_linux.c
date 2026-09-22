@@ -78,8 +78,13 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         char method[16];
         parse_method(packet, length, method, sizeof(method));
         if (strcmp(method, "ACK") == 0) {
-            pb_log_info("sip", "ACK received");
-            if (pending_rtp) {
+            char ack_call_id[256];
+            parse_call_id(packet, length, ack_call_id, sizeof(ack_call_id));
+            bool matching_ack = pending_rtp && ack_call_id[0]
+                && strcmp(ack_call_id, pending_rtp->call_id) == 0;
+            pb_log_info("sip", "ACK received%s",
+                        matching_ack ? " for active dialog" : " for unknown dialog");
+            if (matching_ack) {
                 pthread_t thread;
                 if (pthread_create(&thread, NULL, rtp_stream_thread, pending_rtp) == 0) {
                     pthread_detach(thread);

@@ -6,6 +6,7 @@
 #include "sip_transport.h"
 #include "phoneblock_api_linux.h"
 #include "rtp_linux.h"
+#include "sip_dialog_linux.h"
 
 #include <stdio.h>
 #include <pthread.h>
@@ -86,8 +87,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         if (strcmp(method, "ACK") == 0) {
             char ack_call_id[256];
             parse_call_id(packet, length, ack_call_id, sizeof(ack_call_id));
-            bool matching_ack = pending_rtp && ack_call_id[0]
-                && strcmp(ack_call_id, pending_rtp->call_id) == 0;
+            bool matching_ack = pending_rtp
+                && pb_linux_call_id_matches(pending_rtp->call_id, ack_call_id);
             pb_log_info("sip", "ACK received%s",
                         matching_ack ? " for active dialog" : " for unknown dialog");
             if (matching_ack) {
@@ -109,9 +110,10 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         if (strcmp(method, "BYE") == 0) {
             char bye_call_id[256];
             parse_call_id(packet, length, bye_call_id, sizeof(bye_call_id));
-            bool matching_bye = bye_call_id[0]
-                && ((pending_rtp && strcmp(bye_call_id, pending_rtp->call_id) == 0)
-                    || (active_call_id[0] && strcmp(bye_call_id, active_call_id) == 0));
+            bool matching_bye = (pending_rtp
+                    && pb_linux_call_id_matches(pending_rtp->call_id, bye_call_id))
+                || (active_call_id[0]
+                    && pb_linux_call_id_matches(active_call_id, bye_call_id));
             if (matching_bye) active_cancelled = 1;
             int bye_response_length = sip_response_build(
                 packet, length, matching_bye ? 200 : 481,
@@ -160,16 +162,9 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     parse_sdp_connection_ip(packet, length, remote_rtp_ip,
                                              sizeof(remote_rtp_ip));
                     remote_rtp_port = parse_sdp_audio_port(packet, length);
-                    snprintf(sdp_answer, sizeof(sdp_answer),
-                             "v=0\r\n"
-                             "o=- 0 0 IN IP4 %s\r\n"
-                             "s=PhoneBlock\r\n"
-                             "c=IN IP4 %s\r\n"
-                             "t=0 0\r\n"
-                             "m=audio %d RTP/AVP 8\r\n"
-                             "a=rtpmap:8 PCMA/8000\r\n",
-                             sip_transport_local_ip(transport),
-                             sip_transport_local_ip(transport), rtp_port);
+                    pb_linux_build_sdp_answer(sip_transport_local_ip(transport),
+                                              rtp_port, sdp_answer,
+                                              sizeof(sdp_answer));
                 }
                 pb_log_info("sip", "INVITE %s classified as %s",
                             number, phone_result == 0

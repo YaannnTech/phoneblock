@@ -65,6 +65,7 @@ static void *rtp_stream_thread(void *opaque)
 
 int pb_linux_sip_listen(const char *host, int port, const char *user,
                         const char *password,
+                        const char *auth_user, const char *realm,
                         int local_port, const char *phoneblock_base_url,
                         const char *phoneblock_token,
                         const char *announcement_path, int rtp_port,
@@ -77,7 +78,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     int registration_status = 0;
     char challenge[256];
     if (pb_linux_sip_register_on_transport(transport, host, port, user,
-                                           password, &registration_status,
+                                           password, auth_user, realm,
+                                           &registration_status,
                                            challenge, sizeof(challenge)) != 0
             || registration_status != 200) {
         pb_log_err("sip", "SIP registration failed with status %d",
@@ -97,7 +99,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         if (now_us >= next_register_us) {
             registration_status = 0;
             int register_result = pb_linux_sip_register_on_transport(
-                transport, host, port, user, password, &registration_status,
+                transport, host, port, user, password, auth_user, realm,
+                &registration_status,
                 challenge, sizeof(challenge));
             if (register_result == 0 && registration_status == 200) {
                 pb_log_info("sip", "SIP registration refreshed; next refresh in 1800 s");

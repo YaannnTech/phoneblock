@@ -7,6 +7,8 @@ typedef struct {
     int sip_port;
     char sip_user[32];
     char sip_pass[64];
+    char sip_authuser[32];
+    char sip_realm[64];
     int sip_expires;
     int sip_local_port;
     int rtp_port;

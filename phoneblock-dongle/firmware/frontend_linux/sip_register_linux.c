@@ -56,28 +56,48 @@ static int build_register(const sip_transport_t *transport, const char *host,
         authorization ? authorization : "");
 }
 
-static void build_digest_authorization(const char *host, int port,
-                                       const char *user, const char *password,
+static void build_digest_authorization(const char *host, const char *user,
+                                       const char *password,
+                                       const char *auth_user, const char *realm,
                                        const auth_challenge_t *challenge,
                                        char *out, size_t capacity)
 {
     char uri[256], input[512], ha1[33], ha2[33], response[33];
-    snprintf(uri, sizeof(uri), "sip:%s:%d", host, port);
-    snprintf(input, sizeof(input), "%s:%s:%s", user, challenge->realm, password);
+    snprintf(uri, sizeof(uri), "sip:%s", host);
+    const char *digest_user = auth_user && auth_user[0] ? auth_user : user;
+    const char *digest_realm = realm && realm[0] ? realm : challenge->realm;
+    snprintf(input, sizeof(input), "%s:%s:%s", digest_user, digest_realm,
+             password);
     md5_hex(input, ha1);
     snprintf(input, sizeof(input), "REGISTER:%s", uri);
     md5_hex(input, ha2);
-    snprintf(input, sizeof(input), "%s:%s:%s", ha1, challenge->nonce, ha2);
+    char cnonce[17];
+    snprintf(cnonce, sizeof(cnonce), "%08x%08x", pb_random_u32(), pb_random_u32());
+    if (challenge->qop[0]) {
+        snprintf(input, sizeof(input), "%s:%s:%s:%s:%s:%s", ha1,
+                 challenge->nonce, "00000001", cnonce, challenge->qop, ha2);
+    } else {
+        snprintf(input, sizeof(input), "%s:%s:%s", ha1, challenge->nonce, ha2);
+    }
     md5_hex(input, response);
     snprintf(out, capacity,
              "Authorization: Digest username=\"%s\", realm=\"%s\", "
-             "nonce=\"%s\", uri=\"%s\", response=\"%s\", algorithm=MD5\r\n",
-             user, challenge->realm, challenge->nonce, uri, response);
+             "nonce=\"%s\", uri=\"%s\", response=\"%s\", algorithm=MD5",
+             digest_user, digest_realm, challenge->nonce, uri, response);
+    if (challenge->qop[0]) {
+        size_t length = strlen(out);
+        snprintf(out + length, capacity - length,
+                 ", qop=%s, nc=00000001, cnonce=\"%s\"",
+                 challenge->qop, cnonce);
+    }
+    size_t length = strlen(out);
+    snprintf(out + length, capacity - length, "\r\n");
 }
 
 int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                                        const char *host, int port,
                                        const char *user, const char *password,
+                                       const char *auth_user, const char *realm,
                                        int *status, char *challenge,
                                        int challenge_cap)
 {
@@ -85,6 +105,7 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
             || challenge_cap <= 0) {
         return -1;
     }
+    (void)port;
     *status = 0;
     challenge[0] = '\0';
 
@@ -120,7 +141,8 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
             return -1;
         }
         char authorization[768];
-        build_digest_authorization(host, port, user, password, &parsed,
+        build_digest_authorization(host, user, password, auth_user, realm,
+                       &parsed,
                                    authorization, sizeof(authorization));
         request_length = build_register(transport, host, user, authorization,
                                         request, sizeof(request));
@@ -142,6 +164,7 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
 
 int pb_linux_sip_register_probe(const char *host, int port,
                                 const char *user, const char *password,
+                                const char *auth_user, const char *realm,
                                 int local_port, int *status,
                                 char *challenge, int challenge_cap)
 {
@@ -149,7 +172,8 @@ int pb_linux_sip_register_probe(const char *host, int port,
                                                      NULL, local_port);
     if (!transport) return -1;
     int result = pb_linux_sip_register_on_transport(
-        transport, host, port, user, password, status, challenge, challenge_cap);
+        transport, host, port, user, password, auth_user, realm, status,
+        challenge, challenge_cap);
     sip_transport_close(transport);
     return result;
 }

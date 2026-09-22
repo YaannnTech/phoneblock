@@ -151,7 +151,8 @@ int main(int argc, char **argv)
         char challenge[256];
         int result = pb_linux_sip_register_probe(
             config.sip_host, config.sip_port, config.sip_user,
-            config.sip_pass, config.sip_local_port, &status,
+            config.sip_pass, config.sip_authuser, config.sip_realm,
+            config.sip_local_port, &status,
             challenge, sizeof(challenge));
         if (result != 0) {
             pb_log_err("linux", "SIP REGISTER exchange failed");
@@ -213,6 +214,7 @@ int main(int argc, char **argv)
     if (listen_sip) {
         int result = pb_linux_sip_listen(
             config.sip_host, config.sip_port, config.sip_user, config.sip_pass,
+            config.sip_authuser, config.sip_realm,
             config.sip_local_port, config.phoneblock_base_url,
             config.phoneblock_token, config.announcement_path,
             config.rtp_port,
@@ -224,6 +226,7 @@ int main(int argc, char **argv)
     if (service_mode) {
         int result = pb_linux_sip_listen(
             config.sip_host, config.sip_port, config.sip_user, config.sip_pass,
+            config.sip_authuser, config.sip_realm,
             config.sip_local_port, config.phoneblock_base_url,
             config.phoneblock_token, config.announcement_path, config.rtp_port,
             &shutdown_requested);

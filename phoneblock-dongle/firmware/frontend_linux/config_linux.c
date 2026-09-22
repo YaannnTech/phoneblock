@@ -52,6 +52,12 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
     if (pb_config_file_get(&file, "sip_pass", value, sizeof(value)) == 1) {
         copy_value(config->sip_pass, sizeof(config->sip_pass), value);
     }
+    if (pb_config_file_get(&file, "sip_authuser", value, sizeof(value)) == 1) {
+        copy_value(config->sip_authuser, sizeof(config->sip_authuser), value);
+    }
+    if (pb_config_file_get(&file, "sip_realm", value, sizeof(value)) == 1) {
+        copy_value(config->sip_realm, sizeof(config->sip_realm), value);
+    }
     if (pb_config_file_get(&file, "phoneblock_base_url", value,
                            sizeof(value)) == 1) {
         copy_value(config->phoneblock_base_url,
@@ -107,6 +113,8 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
     if (pb_config_file_set(&file, "sip_host", config->sip_host) != 0
             || pb_config_file_set(&file, "sip_user", config->sip_user) != 0
             || pb_config_file_set(&file, "sip_pass", config->sip_pass) != 0
+            || pb_config_file_set(&file, "sip_authuser", config->sip_authuser) != 0
+            || pb_config_file_set(&file, "sip_realm", config->sip_realm) != 0
             || pb_config_file_set(&file, "phoneblock_base_url",
                       config->phoneblock_base_url) != 0
             || pb_config_file_set(&file, "phoneblock_token",

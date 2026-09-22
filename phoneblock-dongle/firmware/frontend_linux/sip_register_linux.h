@@ -8,6 +8,7 @@
 // Digest challenge when the registrar returned 401 or 407.
 int pb_linux_sip_register_probe(const char *host, int port,
                                 const char *user, const char *password,
+                                const char *auth_user, const char *realm,
                                 int local_port,
                                 int *status, char *challenge,
                                 int challenge_cap);
@@ -15,5 +16,6 @@ int pb_linux_sip_register_probe(const char *host, int port,
                 int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                                         const char *host, int port,
                                         const char *user, const char *password,
+                                        const char *auth_user, const char *realm,
                                         int *status, char *challenge,
                                         int challenge_cap);

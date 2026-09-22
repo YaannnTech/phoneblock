@@ -56,7 +56,8 @@ int main(void)
     int status;
     char challenge[256];
     assert(pb_linux_sip_register_probe("127.0.0.1", ntohs(address.sin_port),
-                                       "620", "secret", 0, &status, challenge,
+                                       "620", "secret", "", "", 0, &status,
+                                       challenge,
                                        sizeof(challenge)) == 0);
     assert(status == 200);
     assert(strstr(challenge, "realm=\"fritz.box\"") != NULL);

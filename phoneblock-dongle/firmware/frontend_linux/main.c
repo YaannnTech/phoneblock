@@ -1,6 +1,7 @@
 #include "config_linux.h"
 #include "phoneblock_api_linux.h"
 #include "platform.h"
+#include "sip_transport.h"
 
 #include <getopt.h>
 #include <signal.h>
@@ -32,7 +33,7 @@ static const char *default_config_path(void)
 static void print_usage(const char *program)
 {
     fprintf(stderr, "Usage: %s [--config PATH] [--foreground] [--check-config] "
-                    "[--check-number NUMBER]\n",
+                    "[--check-number NUMBER] [--probe-sip]\n",
             program);
 }
 
@@ -40,6 +41,7 @@ int main(int argc, char **argv)
 {
     const char *config_path = default_config_path();
     const char *check_number = NULL;
+    int probe_sip = 0;
     int check_config = 0;
 
     static const struct option options[] = {
@@ -47,15 +49,17 @@ int main(int argc, char **argv)
         { "foreground", no_argument, NULL, 'f' },
         { "check-config", no_argument, NULL, 't' },
         { "check-number", required_argument, NULL, 'n' },
+        { "probe-sip", no_argument, NULL, 'p' },
         { NULL, 0, NULL, 0 }
     };
     int option;
-    while ((option = getopt_long(argc, argv, "c:ftn:", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:ftn:p", options, NULL)) != -1) {
         switch (option) {
             case 'c': config_path = optarg; break;
             case 'f': break;
             case 't': check_config = 1; break;
             case 'n': check_number = optarg; break;
+            case 'p': probe_sip = 1; break;
             default:
                 print_usage(argv[0]);
                 return EXIT_FAILURE;
@@ -84,6 +88,20 @@ int main(int argc, char **argv)
         pb_log_info("linux", "PhoneBlock result for %s: %s",
                     check_number,
                     result.verdict == VERDICT_SPAM ? "SPAM" : "LEGITIMATE");
+        return EXIT_SUCCESS;
+    }
+    if (probe_sip) {
+        sip_transport_t *transport = sip_transport_open(
+            config.sip_host[0] ? "udp" : "", config.sip_host,
+            config.sip_port, NULL, config.sip_local_port);
+        if (!transport) {
+            pb_log_err("linux", "SIP transport probe failed");
+            return EXIT_FAILURE;
+        }
+        pb_log_info("linux", "SIP transport ready at %s:%d",
+                    sip_transport_local_ip(transport),
+                    sip_transport_local_port(transport));
+        sip_transport_close(transport);
         return EXIT_SUCCESS;
     }
 

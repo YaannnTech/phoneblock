@@ -21,6 +21,8 @@ void pb_linux_config_defaults(pb_linux_config_t *config)
     copy_value(config->phoneblock_base_url,
                sizeof(config->phoneblock_base_url),
                "https://phoneblock.net/phoneblock");
+    copy_value(config->announcement_path, sizeof(config->announcement_path),
+               "/usr/share/phoneblock/announcement.alaw");
 }
 
 int pb_linux_config_load(const char *path, pb_linux_config_t *config)
@@ -56,6 +58,11 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
         copy_value(config->phoneblock_token,
                    sizeof(config->phoneblock_token), value);
     }
+    if (pb_config_file_get(&file, "announcement_path", value,
+                           sizeof(value)) == 1) {
+        copy_value(config->announcement_path,
+                   sizeof(config->announcement_path), value);
+    }
     config->sip_port = pb_config_file_get_int(&file, "sip_port",
                                                config->sip_port, 1, 65535);
     config->sip_expires = pb_config_file_get_int(&file, "sip_expires",
@@ -89,7 +96,9 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
             || pb_config_file_set(&file, "phoneblock_base_url",
                       config->phoneblock_base_url) != 0
             || pb_config_file_set(&file, "phoneblock_token",
-                      config->phoneblock_token) != 0) {
+                                  config->phoneblock_token) != 0
+            || pb_config_file_set(&file, "announcement_path",
+                                  config->announcement_path) != 0) {
         return -1;
     }
     snprintf(number, sizeof(number), "%d", config->sip_port);

@@ -5,6 +5,7 @@
 #include "sip_response.h"
 #include "sip_transport.h"
 #include "phoneblock_api_linux.h"
+#include "rtp_linux.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 int pb_linux_sip_listen(const char *host, int port, const char *user,
                         int local_port, const char *phoneblock_base_url,
                         const char *phoneblock_token,
+                        const char *announcement_path,
                         volatile sig_atomic_t *stop_requested)
 {
     if (!host || !user || !stop_requested) return -1;
@@ -34,6 +36,9 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         }
         int response_status = 200;
         const char *response_reason = "OK";
+        int spam_call = 0;
+        char remote_rtp_ip[64] = "";
+        int remote_rtp_port = 0;
         if (strcmp(method, "INVITE") == 0) {
             const char *from = find_header(packet, length, "From");
             char from_value[512];
@@ -51,6 +56,11 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                 if (phone_result == 0 && check.verdict != VERDICT_SPAM) {
                     response_status = 486;
                     response_reason = "Busy Here";
+                } else if (phone_result == 0 && check.verdict == VERDICT_SPAM) {
+                    spam_call = 1;
+                    parse_sdp_connection_ip(packet, length, remote_rtp_ip,
+                                             sizeof(remote_rtp_ip));
+                    remote_rtp_port = parse_sdp_audio_port(packet, length);
                 }
                 pb_log_info("sip", "INVITE %s classified as %s",
                             number, phone_result == 0
@@ -66,6 +76,11 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             sip_transport_local_port(transport), response, sizeof(response));
         if (response_length > 0) {
             sip_transport_send_to(transport, &peer, response, response_length);
+            if (spam_call && remote_rtp_ip[0] && remote_rtp_port > 0
+                    && announcement_path && announcement_path[0]) {
+                pb_linux_rtp_stream_alaw(remote_rtp_ip, remote_rtp_port,
+                                         announcement_path, stop_requested);
+            }
         }
     }
     sip_transport_close(transport);

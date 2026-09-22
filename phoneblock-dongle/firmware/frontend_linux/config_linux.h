@@ -12,6 +12,7 @@ typedef struct {
     int rtp_port;
     char phoneblock_base_url[128];
     char phoneblock_token[128];
+    char announcement_path[256];
 } pb_linux_config_t;
 
 void pb_linux_config_defaults(pb_linux_config_t *config);

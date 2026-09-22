@@ -7,6 +7,7 @@
 #include "phoneblock_api_linux.h"
 #include "rtp_linux.h"
 #include "sip_dialog_linux.h"
+#include "sip_register_linux.h"
 
 #include <stdio.h>
 #include <pthread.h>
@@ -63,15 +64,28 @@ static void *rtp_stream_thread(void *opaque)
 }
 
 int pb_linux_sip_listen(const char *host, int port, const char *user,
+                        const char *password,
                         int local_port, const char *phoneblock_base_url,
                         const char *phoneblock_token,
                         const char *announcement_path, int rtp_port,
                         volatile sig_atomic_t *stop_requested)
 {
-    if (!host || !user || !stop_requested) return -1;
+    if (!host || !user || !password || !stop_requested) return -1;
     sip_transport_t *transport = sip_transport_open("udp", host, port,
                                                      NULL, local_port);
     if (!transport) return -1;
+    int registration_status = 0;
+    char challenge[256];
+    if (pb_linux_sip_register_on_transport(transport, host, port, user,
+                                           password, &registration_status,
+                                           challenge, sizeof(challenge)) != 0
+            || registration_status != 200) {
+        pb_log_err("sip", "SIP registration failed with status %d",
+                   registration_status);
+        sip_transport_close(transport);
+        return -1;
+    }
+    uint64_t next_register_us = pb_monotonic_us() + 1800ULL * 1000000ULL;
 
     char packet[8192];
     char response[4096];
@@ -79,6 +93,21 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     rtp_stream_args_t *pending_rtp = NULL;
     char active_call_id[256] = "";
     while (!*stop_requested) {
+        uint64_t now_us = pb_monotonic_us();
+        if (now_us >= next_register_us) {
+            registration_status = 0;
+            int register_result = pb_linux_sip_register_on_transport(
+                transport, host, port, user, password, &registration_status,
+                challenge, sizeof(challenge));
+            if (register_result == 0 && registration_status == 200) {
+                pb_log_info("sip", "SIP registration refreshed; next refresh in 1800 s");
+                next_register_us = now_us + 1800ULL * 1000000ULL;
+            } else {
+                pb_log_warn("sip", "SIP refresh failed with status %d; retrying in 30 s",
+                            registration_status);
+                next_register_us = now_us + 30ULL * 1000000ULL;
+            }
+        }
         int length = sip_transport_recv(transport, 500, packet,
                                          sizeof(packet) - 1, &peer);
         if (length <= 0) continue;

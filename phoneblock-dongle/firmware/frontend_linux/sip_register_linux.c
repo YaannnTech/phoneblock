@@ -75,26 +75,24 @@ static void build_digest_authorization(const char *host, int port,
              user, challenge->realm, challenge->nonce, uri, response);
 }
 
-int pb_linux_sip_register_probe(const char *host, int port,
-                                const char *user, const char *password,
-                                int local_port, int *status,
-                                char *challenge, int challenge_cap)
+int pb_linux_sip_register_on_transport(sip_transport_t *transport,
+                                       const char *host, int port,
+                                       const char *user, const char *password,
+                                       int *status, char *challenge,
+                                       int challenge_cap)
 {
-    if (!host || !user || !password || !status || !challenge || challenge_cap <= 0) {
+    if (!transport || !host || !user || !password || !status || !challenge
+            || challenge_cap <= 0) {
         return -1;
     }
     *status = 0;
     challenge[0] = '\0';
-    sip_transport_t *transport = sip_transport_open("udp", host, port,
-                                                     NULL, local_port);
-    if (!transport) return -1;
 
     char request[2048];
     int request_length = build_register(transport, host, user, NULL,
                                         request, sizeof(request));
     if (request_length < 0 || (size_t)request_length >= sizeof(request)
             || sip_transport_send(transport, request, request_length) < 0) {
-        sip_transport_close(transport);
         return -1;
     }
 
@@ -103,7 +101,6 @@ int pb_linux_sip_register_probe(const char *host, int port,
     int response_length = sip_transport_recv(transport, 3000, response,
                                               sizeof(response) - 1, &from);
     if (response_length <= 0) {
-        sip_transport_close(transport);
         return -1;
     }
     response[response_length] = '\0';
@@ -114,14 +111,12 @@ int pb_linux_sip_register_probe(const char *host, int port,
                                              ? "WWW-Authenticate"
                                              : "Proxy-Authenticate");
         if (!header) {
-            sip_transport_close(transport);
             return -1;
         }
         header_value(header, response + response_length, challenge, challenge_cap);
         auth_challenge_t parsed;
         sip_auth_parse_challenge(challenge, &parsed);
         if (!parsed.valid) {
-            sip_transport_close(transport);
             return -1;
         }
         char authorization[768];
@@ -131,7 +126,6 @@ int pb_linux_sip_register_probe(const char *host, int port,
                                         request, sizeof(request));
         if (request_length < 0 || (size_t)request_length >= sizeof(request)
                 || sip_transport_send(transport, request, request_length) < 0) {
-            sip_transport_close(transport);
             return -1;
         }
         response_length = sip_transport_recv(transport, 3000, response,
@@ -143,6 +137,19 @@ int pb_linux_sip_register_probe(const char *host, int port,
         response[response_length] = '\0';
         *status = parse_status_code(response, response_length);
     }
-    sip_transport_close(transport);
     return 0;
+}
+
+int pb_linux_sip_register_probe(const char *host, int port,
+                                const char *user, const char *password,
+                                int local_port, int *status,
+                                char *challenge, int challenge_cap)
+{
+    sip_transport_t *transport = sip_transport_open("udp", host, port,
+                                                     NULL, local_port);
+    if (!transport) return -1;
+    int result = pb_linux_sip_register_on_transport(
+        transport, host, port, user, password, status, challenge, challenge_cap);
+    sip_transport_close(transport);
+    return result;
 }

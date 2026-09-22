@@ -7,7 +7,7 @@ CFLAGS  ?= -Wall -Wextra -Werror -O0 -g -I../main -I../core
 IDF_PATH ?= $(HOME)/tools/esp/esp-idf
 CJSON_DIR := $(IDF_PATH)/components/json/cJSON
 
-BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file test_config_linux test_sip_transport_linux test_http_client_linux test_phoneblock_api_linux test_tr064_client_linux
+BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file test_config_linux test_sip_transport_linux test_http_client_linux test_phoneblock_api_linux test_tr064_client_linux test_sip_register_linux
 
 test_sip_parse: test_sip_parse.c ../core/sip_parse.c ../core/sip_parse.h \
 				../core/dial_rules.c ../core/dial_rules.h \
@@ -105,6 +105,15 @@ test_tr064_client_linux: test_tr064_client_linux.c ../frontend_linux/tr064_clien
 	$(CC) $(CFLAGS) -I../frontend_linux -pthread test_tr064_client_linux.c \
 	../frontend_linux/tr064_client_linux.c ../frontend_linux/http_client_linux.c \
 	$$(pkg-config --cflags --libs libcurl) -o $@
+
+test_sip_register_linux: test_sip_register_linux.c ../frontend_linux/sip_register_linux.c \
+			 ../frontend_linux/sip_register_linux.h ../main/sip_auth.c \
+			 ../core/sip_parse.c ../core/sip_parse.h ../core/dial_rules.c \
+			 ../main/audio.c ../frontend_linux/sip_transport_linux.c
+	$(CC) $(CFLAGS) -I../frontend_linux -pthread test_sip_register_linux.c \
+	../frontend_linux/sip_register_linux.c ../main/sip_auth.c \
+	../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
+	../frontend_linux/sip_transport_linux.c ../core/platform_linux.c -o $@
 
 phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 		  ../frontend_linux/config_linux.h ../frontend_linux/config_file.c \

@@ -7,7 +7,7 @@ CFLAGS  ?= -Wall -Wextra -Werror -O0 -g -I../main -I../core
 IDF_PATH ?= $(HOME)/tools/esp/esp-idf
 CJSON_DIR := $(IDF_PATH)/components/json/cJSON
 
-BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file
+BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file test_config_linux
 
 test_sip_parse: test_sip_parse.c ../core/sip_parse.c ../core/sip_parse.h \
 				../core/dial_rules.c ../core/dial_rules.h \
@@ -75,6 +75,11 @@ test_platform_linux: test_platform_linux.c ../core/platform_linux.c ../core/plat
 
 test_config_file: test_config_file.c ../frontend_linux/config_file.c ../frontend_linux/config_file.h
 	$(CC) $(CFLAGS) -I../frontend_linux test_config_file.c ../frontend_linux/config_file.c -o $@
+
+test_config_linux: test_config_linux.c ../frontend_linux/config_linux.c ../frontend_linux/config_linux.h \
+                   ../frontend_linux/config_file.c ../frontend_linux/config_file.h
+	$(CC) $(CFLAGS) -I../frontend_linux test_config_linux.c ../frontend_linux/config_linux.c \
+        ../frontend_linux/config_file.c -o $@
 
 # strbuf.h is header-only; build its test with AddressSanitizer so any overrun
 # of the (malloc'd) destination buffer aborts.

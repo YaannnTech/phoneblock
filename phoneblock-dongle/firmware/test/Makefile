@@ -131,6 +131,7 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 				  ../frontend_linux/sip_register_linux.c ../frontend_linux/sip_register_linux.h \
 				  ../frontend_linux/sip_server_linux.c ../frontend_linux/sip_server_linux.h \
 				  ../frontend_linux/sip_dialog_linux.c ../frontend_linux/sip_dialog_linux.h \
+				  ../frontend_linux/web_linux.c ../frontend_linux/web_linux.h \
 				  ../frontend_linux/rtp_linux.c ../frontend_linux/rtp_linux.h \
 				  ../frontend_linux/phoneblock_api_linux.c \
 				  ../main/sip_response.c ../main/sip_response.h \
@@ -144,6 +145,7 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 	../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
 	../frontend_linux/sip_server_linux.c \
 	../frontend_linux/sip_dialog_linux.c \
+	../frontend_linux/web_linux.c \
 	../frontend_linux/rtp_linux.c \
 	../main/sip_response.c \
 	../core/platform_linux.c $(CJSON_CFLAGS) \

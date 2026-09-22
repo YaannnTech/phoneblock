@@ -2,6 +2,7 @@
 
 #include "config_linux.h"
 #include "platform.h"
+#include "sip_state_linux.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -75,10 +76,25 @@ int pb_linux_web_serve(int port, const char *bind_host,
             send_response(client, 200, "OK", "text/html; charset=utf-8",
                           dashboard_html());
         } else if (strncmp(request, "GET /api/status ", 16) == 0) {
-            char body[512];
+            pb_linux_config_t config;
+            if (pb_linux_config_load(config_path, &config) != 0) {
+                send_response(client, 500, "Internal Server Error",
+                              "text/plain; charset=utf-8", "config load failed\n");
+                close(client);
+                continue;
+            }
+            char body[1024];
             snprintf(body, sizeof(body),
-                     "{\"sipHost\":\"%s\",\"sipPort\":%d,\"service\":\"linux\"}\n",
-                     sip_host, sip_port);
+                     "{\"sipHost\":\"%s\",\"sipPort\":%d,\"service\":\"linux\","
+                     "\"registered\":%s,\"sipUser\":\"%s\",\"sipPassSet\":%s,"
+                     "\"phoneblockTokenSet\":%s,\"localSipPort\":%d,\"rtpPort\":%d,"
+                     "\"phoneblockBaseUrl\":\"%s\"}\n",
+                     sip_host, sip_port,
+                     pb_linux_sip_state_is_registered() ? "true" : "false",
+                     config.sip_user, config.sip_pass[0] ? "true" : "false",
+                     config.phoneblock_token[0] ? "true" : "false",
+                     config.sip_local_port, config.rtp_port,
+                     config.phoneblock_base_url);
             send_response(client, 200, "OK", "application/json", body);
         } else if (strncmp(request, "GET /api/config ", 16) == 0) {
             pb_linux_config_t config;
@@ -210,7 +226,8 @@ static const char *dashboard_html(void)
         ".wide{grid-column:1/-1}.muted{color:#697572}.ok{color:#16734f}.error{color:#a22}"
         "</style></head><body><header><h1>PhoneBlock Dongle</h1>"
         "<div>SIP call screening service</div></header>"
-        "<section><h2>Service status</h2><p id=\"status\" class=\"muted\">Loading...</p>"
+        "<section><h2>Status</h2><p id=\"status\" class=\"muted\">Loading...</p>"
+        "<div id=\"details\" class=\"muted\"></div>"
         "<p><a href=\"/api/status\">View raw status</a></p></section>"
         "<section><h2>Configuration</h2><form id=\"form\">"
         "<label>Registrar host<input name=\"sip_host\" required></label>"
@@ -227,7 +244,11 @@ static const char *dashboard_html(void)
         "<script>const q=s=>document.querySelector(s);async function load(){"
         "const c=await fetch('/api/config').then(r=>r.json());for(const [k,v] of Object.entries(c)){"
         "const e=q('[name=\\\"'+k+'\\\"]');if(e)e.value=v||'';}const s=await fetch('/api/status').then(r=>r.json());"
-        "q('#status').textContent='SIP registrar '+s.sipHost+':'+s.sipPort+' | '+s.service;}"
+        "q('#status').textContent=s.registered?'SIP registration: registered':'SIP registration: not registered';"
+        "q('#status').className=s.registered?'ok':'error';q('#details').innerHTML="
+        "'Registrar: '+s.sipHost+':'+s.sipPort+'<br>SIP user: '+s.sipUser+"
+        "'<br>PhoneBlock token: '+(s.phoneblockTokenSet?'configured':'not configured')+"
+        "'<br>Local SIP port: '+s.localSipPort+' | RTP port: '+s.rtpPort; }"
         "q('#form').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/config',{method:'POST',"
         "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});"
         "const m=q('#message');m.textContent=r.ok?'Saved. Restart the add-on to apply changes.':'Save failed';"

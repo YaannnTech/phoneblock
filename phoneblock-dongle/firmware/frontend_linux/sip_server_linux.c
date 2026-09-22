@@ -8,6 +8,7 @@
 #include "rtp_linux.h"
 #include "sip_dialog_linux.h"
 #include "sip_register_linux.h"
+#include "sip_state_linux.h"
 
 #include <stdio.h>
 #include <pthread.h>
@@ -72,6 +73,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                         volatile sig_atomic_t *stop_requested)
 {
     if (!host || !user || !password || !stop_requested) return -1;
+    pb_linux_sip_state_set_registered(false);
     sip_transport_t *transport = sip_transport_open("udp", host, port,
                                                      NULL, local_port);
     if (!transport) return -1;
@@ -87,6 +89,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         sip_transport_close(transport);
         return -1;
     }
+    pb_linux_sip_state_set_registered(true);
     uint64_t next_register_us = pb_monotonic_us() + 1800ULL * 1000000ULL;
 
     char packet[8192];
@@ -106,6 +109,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                 pb_log_info("sip", "SIP registration refreshed; next refresh in 1800 s");
                 next_register_us = now_us + 1800ULL * 1000000ULL;
             } else {
+                pb_linux_sip_state_set_registered(false);
                 pb_log_warn("sip", "SIP refresh failed with status %d; retrying in 30 s",
                             registration_status);
                 next_register_us = now_us + 30ULL * 1000000ULL;
@@ -254,5 +258,6 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     s_rtp_cancelled = 1;
     free(pending_rtp);
     sip_transport_close(transport);
+    pb_linux_sip_state_set_registered(false);
     return 0;
 }

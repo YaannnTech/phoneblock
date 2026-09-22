@@ -89,12 +89,13 @@ int pb_linux_web_serve(int port, const char *bind_host,
             char body[1024];
             snprintf(body, sizeof(body),
                      "{\"sipHost\":\"%s\",\"sipPort\":%d,\"service\":\"linux\","
-                     "\"registered\":%s,\"sipUser\":\"%s\",\"sipPassSet\":%s,"
+                     "\"configured\":%s,\"registered\":%s,\"sipUser\":\"%s\",\"sipPassSet\":%s,"
                      "\"phoneblockTokenSet\":%s,\"localSipPort\":%d,\"rtpPort\":%d,"
                      "\"phoneblockBaseUrl\":\"%s\","
                      "\"calls\":%llu,\"spamBlocked\":%llu,"
                      "\"callsPassed\":%llu,\"classificationErrors\":%llu}\n",
                      sip_host, sip_port,
+                     (config.sip_host[0] && config.sip_user[0]) ? "true" : "false",
                      pb_linux_sip_state_is_registered() ? "true" : "false",
                      config.sip_user, config.sip_pass[0] ? "true" : "false",
                      config.phoneblock_token[0] ? "true" : "false",

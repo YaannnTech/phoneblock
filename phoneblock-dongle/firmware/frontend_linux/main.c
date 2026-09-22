@@ -227,6 +227,12 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
     if (service_mode) {
+        if (!config.sip_host[0] || !config.sip_user[0]) {
+            pb_log_warn("linux", "SIP is not configured; configure it in the web UI");
+            while (!shutdown_requested) pause();
+            pb_log_info("linux", "shutdown requested");
+            return EXIT_SUCCESS;
+        }
         int result = pb_linux_sip_listen(
             config.sip_host, config.sip_port, config.sip_user, config.sip_pass,
             config.sip_authuser, config.sip_realm,

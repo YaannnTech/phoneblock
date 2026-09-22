@@ -1,11 +1,10 @@
 CC      ?= gcc
 CFLAGS  ?= -Wall -Wextra -Werror -O0 -g -I../main -I../core
 
-# api_scan depends on cJSON, which ships with ESP-IDF. We compile it
-# in via $(IDF_PATH); no toolchain is needed, only the source files.
-# Relax warnings on the third-party cJSON.c only.
-IDF_PATH ?= $(HOME)/tools/esp/esp-idf
-CJSON_DIR := $(IDF_PATH)/components/json/cJSON
+# Linux host tests use the distribution cJSON library and do not require
+# ESP-IDF. The ESP32 firmware build supplies its own cJSON component.
+CJSON_CFLAGS := $(shell pkg-config --cflags libcjson)
+CJSON_LIBS   := $(shell pkg-config --libs libcjson)
 
 BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file test_config_linux test_sip_transport_linux test_http_client_linux test_phoneblock_api_linux test_tr064_client_linux test_sip_register_linux test_rtp_linux test_sip_dialog_linux
 
@@ -37,11 +36,9 @@ test_log_capture: test_log_capture.c ../main/log_capture.c ../main/log_capture.h
 test_improv_proto: test_improv_proto.c ../main/improv_proto.c ../main/improv_proto.h
 	$(CC) $(CFLAGS) test_improv_proto.c ../main/improv_proto.c -o $@
 
-cjson.o: $(CJSON_DIR)/cJSON.c $(CJSON_DIR)/cJSON.h
-	$(CC) -O0 -g -I$(CJSON_DIR) -c $< -o $@
-
-test_api_scan: test_api_scan.c ../main/api_scan.c ../main/api_scan.h cjson.o
-	$(CC) $(CFLAGS) -I$(CJSON_DIR) test_api_scan.c ../main/api_scan.c cjson.o -o $@
+test_api_scan: test_api_scan.c ../main/api_scan.c ../main/api_scan.h
+	$(CC) $(CFLAGS) $(CJSON_CFLAGS) test_api_scan.c ../main/api_scan.c \
+		$(CJSON_LIBS) -o $@
 
 test_blocklist_lookup: test_blocklist_lookup.c ../main/blocklist_lookup.c ../main/blocklist_lookup.h
 	$(CC) $(CFLAGS) test_blocklist_lookup.c ../main/blocklist_lookup.c -o $@
@@ -95,9 +92,9 @@ test_phoneblock_api_linux: test_phoneblock_api_linux.c ../frontend_linux/phonebl
 			   ../frontend_linux/phoneblock_api_linux.h ../main/api_scan.c \
 			   ../main/api_scan.h ../frontend_linux/http_client_linux.c \
 			   ../frontend_linux/http_client_linux.h
-	$(CC) $(CFLAGS) -I../frontend_linux -I$(CJSON_DIR) test_phoneblock_api_linux.c \
+	$(CC) $(CFLAGS) $(CJSON_CFLAGS) -I../frontend_linux test_phoneblock_api_linux.c \
 	../frontend_linux/phoneblock_api_linux.c ../main/api_scan.c \
-	../frontend_linux/http_client_linux.c $(CJSON_DIR)/cJSON.c \
+	../frontend_linux/http_client_linux.c $(CJSON_LIBS) \
 	$$(pkg-config --cflags --libs libcurl openssl) -o $@
 
 test_tr064_client_linux: test_tr064_client_linux.c ../frontend_linux/tr064_client_linux.c \
@@ -145,12 +142,12 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 	../frontend_linux/sip_transport_linux.c ../main/api_scan.c \
 	../frontend_linux/sip_register_linux.c ../main/sip_auth.c \
 	../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
-	../frontend_linux/sip_server_linux.c ../frontend_linux/phoneblock_api_linux.c \
+	../frontend_linux/sip_server_linux.c \
 	../frontend_linux/sip_dialog_linux.c \
 	../frontend_linux/rtp_linux.c \
 	../main/sip_response.c \
-	$(CJSON_DIR)/cJSON.c ../core/platform_linux.c \
-	-I$(CJSON_DIR) $$(pkg-config --cflags --libs libcurl openssl) -o $@
+	../core/platform_linux.c $(CJSON_CFLAGS) \
+	$$(pkg-config --cflags --libs libcurl openssl) $(CJSON_LIBS) -o $@
 
 # strbuf.h is header-only; build its test with AddressSanitizer so any overrun
 # of the (malloc'd) destination buffer aborts.
@@ -170,6 +167,6 @@ test: $(BINS)
 	@echo "→ test-signing-roundtrip.sh"; ./test-signing-roundtrip.sh
 
 clean:
-	rm -f $(BINS) cjson.o
+	rm -f $(BINS)
 
 .PHONY: test clean

@@ -3,9 +3,8 @@
 The package installs the native Linux executable as
 `/usr/bin/phoneblock-dongle` and provides a hardened systemd unit.
 
-The current development build still obtains cJSON from ESP-IDF through the
-host-test Makefile. Before building a standalone Debian package, vendor cJSON
-or change the Linux build to use the distribution `libcjson-dev` package.
+The Linux host build uses the distribution `libcjson-dev` package and does
+not require ESP-IDF.
 
 Build from the `phoneblock-dongle` directory:
 

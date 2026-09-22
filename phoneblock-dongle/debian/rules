@@ -4,7 +4,7 @@
 	dh $@
 
 override_dh_auto_build:
-	$(MAKE) -C firmware/test phoneblock_linux IDF_PATH=/usr
+	$(MAKE) -C firmware/test phoneblock_linux
 
 override_dh_auto_install:
 	dh_install

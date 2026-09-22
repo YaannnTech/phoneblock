@@ -5,8 +5,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 
@@ -363,7 +361,7 @@ static void rtp_audio_task(void *arg)
     // SRTP appends an auth tag (10 bytes for HMAC_SHA1_80); leave room.
     uint8_t txbuf[RTP_HEADER_BYTES + FRAME_BYTES + SRTP_MAX_TRAILER_LEN];
 
-    TickType_t next = xTaskGetTickCount();
+    uint64_t next_us = 0;
     for (size_t frame = 0; frame < total_frames; frame++) {
         if (s_abort) {
             pb_log_info(TAG, "stream aborted at frame %u/%u",
@@ -405,7 +403,7 @@ static void rtp_audio_task(void *arg)
                 pb_log_warn(TAG, "srtp_protect failed: %d", st);
                 seq++;
                 timestamp += FRAME_SAMPLES;
-                vTaskDelayUntil(&next, pdMS_TO_TICKS(20));
+                pb_task_delay_until_ms(&next_us, 20);
                 continue;
             }
             send_buf = txbuf;
@@ -436,7 +434,7 @@ static void rtp_audio_task(void *arg)
 
         seq++;
         timestamp += FRAME_SAMPLES;
-        vTaskDelayUntil(&next, pdMS_TO_TICKS(20));
+        pb_task_delay_until_ms(&next_us, 20);
     }
 
     pb_log_info(TAG, "inbound RTP during stream: %u packet(s) from %s:%d",

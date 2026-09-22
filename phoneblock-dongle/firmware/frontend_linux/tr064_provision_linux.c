@@ -1,6 +1,7 @@
 #include "tr064_provision_linux.h"
 
 #include "http_client_linux.h"
+#include "platform.h"
 #include "tr064_parse.h"
 
 #include <openssl/evp.h>
@@ -43,9 +44,13 @@ static int soap_post(const char *host, int port, const char *action,
     if (pb_http_post_xml(url, soap_action, body, 16384, &result) != 0
             || ((!allow_challenge && (result.status < 200 || result.status >= 300))
                 || (allow_challenge && result.status != 503 && result.status != 200))) {
+        pb_log_err("tr064", "SOAP %s failed: transport or HTTP status %ld",
+                   action, result.status);
         pb_http_response_free(&result);
         return -1;
     }
+    pb_log_info("tr064", "SOAP %s returned HTTP %ld (%zu bytes)",
+                action, result.status, result.length);
     *response = result.body;
     return 0;
 }
@@ -65,6 +70,10 @@ static int call_action(const char *host, int port, const char *user,
     char nonce[128] = "", realm[128] = "";
     tr064_xml_find_text(challenge, "Nonce", nonce, sizeof(nonce));
     tr064_xml_find_text(challenge, "Realm", realm, sizeof(realm));
+    if (!nonce[0] || !realm[0]) {
+        pb_log_err("tr064", "InitChallenge missing Nonce/Realm; response: %.512s",
+                   challenge);
+    }
     free(challenge);
     if (!nonce[0] || !realm[0]) return -1;
 
@@ -106,7 +115,11 @@ int pb_tr064_provision_sip(const char *host, int port,
         password, user, phone_name && phone_name[0] ? phone_name : "PhoneBlock");
     char *response = NULL;
     if (call_action(host, port, admin_user, admin_pass, "X_AVM-DE_SetClient4",
-                    args, &response) != 0) return -1;
+                    args, &response) != 0) {
+        pb_log_err("tr064", "SetClient4 failed for Fritz!Box %s:%d as user '%s'",
+                   host, port, admin_user);
+        return -1;
+    }
     tr064_xml_find_text(response, "NewX_AVM-DE_InternalNumber",
                         out->internal_number, sizeof(out->internal_number));
     free(response);

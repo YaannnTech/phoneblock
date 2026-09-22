@@ -6,9 +6,6 @@
 #include <strings.h>
 #include <stdbool.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
 #include "mbedtls/md5.h"
 #include "mbedtls/base64.h"
 
@@ -575,7 +572,7 @@ static int sip_send_recv(sip_ctx_t *c, const char *tx, int tx_len,
         // Feed the task watchdog between slices so a long total wait (slow
         // or dead registrar) can't trip the 20 s WDT mid-registration.
         // Harmless no-op when this task isn't subscribed (initial register
-        // runs before esp_task_wdt_add()).
+        // runs before the task watchdog is subscribed).
         if (pb_watchdog_is_subscribed()) pb_watchdog_reset();
 
         int64_t remaining_us = deadline - (int64_t)pb_monotonic_us();
@@ -1821,7 +1818,7 @@ static void sip_task(void *arg)
     }
 
     // Subscribe to the task watchdog. Any iteration that doesn't loop
-    // back to esp_task_wdt_reset() within CONFIG_ESP_TASK_WDT_TIMEOUT_S
+    // back to the platform watchdog reset within its configured timeout
     // triggers a panic + coredump (see sdkconfig.defaults). The
     // synchronous phoneblock_check() and do_register() inside this
     // loop can wedge on a half-closed TLS connection past their own

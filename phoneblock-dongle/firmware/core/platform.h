@@ -19,6 +19,7 @@ typedef struct pb_mutex pb_mutex_t;
 pb_task_t *pb_task_create(void (*fn)(void *), void *arg,
                           const char *name, size_t stack_bytes);
 void pb_task_sleep_ms(uint32_t ms);
+void pb_task_delay_until_ms(uint64_t *deadline_us, uint32_t interval_ms);
 void pb_task_yield(void);
 
 pb_mutex_t *pb_mutex_create(void);

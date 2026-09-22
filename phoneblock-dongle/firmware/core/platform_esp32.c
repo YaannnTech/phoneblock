@@ -80,6 +80,20 @@ void pb_task_sleep_ms(uint32_t milliseconds)
     vTaskDelay(pdMS_TO_TICKS(milliseconds));
 }
 
+void pb_task_delay_until_ms(uint64_t *deadline_us, uint32_t interval_ms)
+{
+    if (!deadline_us) return;
+    uint64_t now = pb_monotonic_us();
+    if (*deadline_us == 0) *deadline_us = now;
+    *deadline_us += (uint64_t)interval_ms * 1000u;
+    if (*deadline_us > now) {
+        uint64_t delay_us = *deadline_us - now;
+        pb_task_sleep_ms((uint32_t)((delay_us + 999u) / 1000u));
+    } else {
+        *deadline_us = now;
+    }
+}
+
 void pb_task_yield(void)
 {
     taskYIELD();

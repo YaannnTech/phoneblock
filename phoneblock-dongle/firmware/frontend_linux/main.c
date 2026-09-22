@@ -2,6 +2,7 @@
 #include "phoneblock_api_linux.h"
 #include "platform.h"
 #include "sip_register_linux.h"
+#include "sip_server_linux.h"
 #include "sip_transport.h"
 
 #include <getopt.h>
@@ -35,7 +36,7 @@ static void print_usage(const char *program)
 {
     fprintf(stderr, "Usage: %s [--config PATH] [--foreground] [--check-config] "
                     "[--check-number NUMBER] [--probe-sip] [--register-sip] "
-                    "[--service]\n",
+                    "[--service] [--listen-sip]\n",
             program);
 }
 
@@ -46,6 +47,7 @@ int main(int argc, char **argv)
     int probe_sip = 0;
     int register_sip = 0;
     int service_mode = 0;
+    int listen_sip = 0;
     int check_config = 0;
 
     static const struct option options[] = {
@@ -56,10 +58,11 @@ int main(int argc, char **argv)
         { "probe-sip", no_argument, NULL, 'p' },
         { "register-sip", no_argument, NULL, 'r' },
         { "service", no_argument, NULL, 's' },
+        { "listen-sip", no_argument, NULL, 'l' },
         { NULL, 0, NULL, 0 }
     };
     int option;
-    while ((option = getopt_long(argc, argv, "c:ftn:prs", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:ftn:prsl", options, NULL)) != -1) {
         switch (option) {
             case 'c': config_path = optarg; break;
             case 'f': break;
@@ -68,6 +71,7 @@ int main(int argc, char **argv)
             case 'p': probe_sip = 1; break;
             case 'r': register_sip = 1; break;
             case 's': service_mode = 1; break;
+            case 'l': listen_sip = 1; break;
             default:
                 print_usage(argv[0]);
                 return EXIT_FAILURE;
@@ -134,6 +138,14 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTERM, &action, NULL);
     pb_log_info("linux", "service skeleton running");
+    if (listen_sip) {
+        int result = pb_linux_sip_listen(
+            config.sip_host, config.sip_port, config.sip_user,
+            config.sip_local_port, &shutdown_requested);
+        if (result != 0) return EXIT_FAILURE;
+        pb_log_info("linux", "SIP listener stopped");
+        return EXIT_SUCCESS;
+    }
     if (service_mode) {
         while (!shutdown_requested) {
             int status = 0;

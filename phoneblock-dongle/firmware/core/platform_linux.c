@@ -80,6 +80,19 @@ uint32_t pb_random_u32(void)
     return value ^ (uint32_t)(uintptr_t)&value;
 }
 
+int pb_watchdog_is_subscribed(void)
+{
+    return 0;
+}
+
+void pb_watchdog_subscribe(void)
+{
+}
+
+void pb_watchdog_reset(void)
+{
+}
+
 void pb_task_sleep_ms(uint32_t milliseconds)
 {
     struct timespec delay = {

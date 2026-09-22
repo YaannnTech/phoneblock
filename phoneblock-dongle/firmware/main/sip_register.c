@@ -9,7 +9,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "esp_task_wdt.h"
 #include "mbedtls/md5.h"
 #include "mbedtls/base64.h"
 
@@ -577,7 +576,7 @@ static int sip_send_recv(sip_ctx_t *c, const char *tx, int tx_len,
         // or dead registrar) can't trip the 20 s WDT mid-registration.
         // Harmless no-op when this task isn't subscribed (initial register
         // runs before esp_task_wdt_add()).
-        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+        if (pb_watchdog_is_subscribed()) pb_watchdog_reset();
 
         int64_t remaining_us = deadline - (int64_t)pb_monotonic_us();
         if (remaining_us <= 0) {
@@ -1828,10 +1827,10 @@ static void sip_task(void *arg)
     // loop can wedge on a half-closed TLS connection past their own
     // 10 s timeouts; without this the task hangs silently and the
     // web UI gets starved of any "still alive" signal.
-    esp_task_wdt_add(NULL);
+    pb_watchdog_subscribe();
 
     while (1) {
-        esp_task_wdt_reset();
+        pb_watchdog_reset();
         // Config changed? Re-register with the new credentials before
         // going back to sleep in select(). The web-UI POST handler sets
         // the flag via sip_register_request_reload().

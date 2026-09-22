@@ -3,6 +3,7 @@
 #include "config_linux.h"
 #include "platform.h"
 #include "sip_state_linux.h"
+#include "sip_stats_linux.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -77,6 +78,8 @@ int pb_linux_web_serve(int port, const char *bind_host,
                           dashboard_html());
         } else if (strncmp(request, "GET /api/status ", 16) == 0) {
             pb_linux_config_t config;
+            pb_linux_sip_stats_t stats;
+            pb_linux_sip_stats_read(&stats);
             if (pb_linux_config_load(config_path, &config) != 0) {
                 send_response(client, 500, "Internal Server Error",
                               "text/plain; charset=utf-8", "config load failed\n");
@@ -88,13 +91,19 @@ int pb_linux_web_serve(int port, const char *bind_host,
                      "{\"sipHost\":\"%s\",\"sipPort\":%d,\"service\":\"linux\","
                      "\"registered\":%s,\"sipUser\":\"%s\",\"sipPassSet\":%s,"
                      "\"phoneblockTokenSet\":%s,\"localSipPort\":%d,\"rtpPort\":%d,"
-                     "\"phoneblockBaseUrl\":\"%s\"}\n",
+                     "\"phoneblockBaseUrl\":\"%s\","
+                     "\"calls\":%llu,\"spamBlocked\":%llu,"
+                     "\"callsPassed\":%llu,\"classificationErrors\":%llu}\n",
                      sip_host, sip_port,
                      pb_linux_sip_state_is_registered() ? "true" : "false",
                      config.sip_user, config.sip_pass[0] ? "true" : "false",
                      config.phoneblock_token[0] ? "true" : "false",
                      config.sip_local_port, config.rtp_port,
-                     config.phoneblock_base_url);
+                     config.phoneblock_base_url,
+                     (unsigned long long)stats.calls,
+                     (unsigned long long)stats.spam_blocked,
+                     (unsigned long long)stats.calls_passed,
+                     (unsigned long long)stats.classification_errors);
             send_response(client, 200, "OK", "application/json", body);
         } else if (strncmp(request, "GET /api/config ", 16) == 0) {
             pb_linux_config_t config;
@@ -229,6 +238,7 @@ static const char *dashboard_html(void)
         "<section><h2>Status</h2><p id=\"status\" class=\"muted\">Loading...</p>"
         "<div id=\"details\" class=\"muted\"></div>"
         "<p><a href=\"/api/status\">View raw status</a></p></section>"
+        "<section><h2>Statistics since service start</h2><div id=\"stats\" class=\"muted\">Loading...</div></section>"
         "<section><h2>Configuration</h2><form id=\"form\">"
         "<label>Registrar host<input name=\"sip_host\" required></label>"
         "<label>Registrar port<input name=\"sip_port\" type=\"number\" min=\"1\" max=\"65535\"></label>"
@@ -248,7 +258,9 @@ static const char *dashboard_html(void)
         "q('#status').className=s.registered?'ok':'error';q('#details').innerHTML="
         "'Registrar: '+s.sipHost+':'+s.sipPort+'<br>SIP user: '+s.sipUser+"
         "'<br>PhoneBlock token: '+(s.phoneblockTokenSet?'configured':'not configured')+"
-        "'<br>Local SIP port: '+s.localSipPort+' | RTP port: '+s.rtpPort; }"
+        "'<br>Local SIP port: '+s.localSipPort+' | RTP port: '+s.rtpPort;"
+        "q('#stats').innerHTML='Calls: '+s.calls+'<br>Spam blocked: '+s.spamBlocked+"
+        "'<br>Calls passed: '+s.callsPassed+'<br>Classification errors: '+s.classificationErrors; }"
         "q('#form').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/config',{method:'POST',"
         "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});"
         "const m=q('#message');m.textContent=r.ok?'Saved. Restart the add-on to apply changes.':'Save failed';"

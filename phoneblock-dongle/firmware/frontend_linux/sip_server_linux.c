@@ -9,6 +9,7 @@
 #include "sip_dialog_linux.h"
 #include "sip_register_linux.h"
 #include "sip_state_linux.h"
+#include "sip_stats_linux.h"
 
 #include <stdio.h>
 #include <pthread.h>
@@ -178,6 +179,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         char remote_rtp_ip[64] = "";
         int remote_rtp_port = 0;
         if (strcmp(method, "INVITE") == 0) {
+            pb_linux_sip_stats_call();
             const char *from = find_header(packet, length, "From");
             char from_value[512];
             char uri[256];
@@ -192,9 +194,11 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                 phone_result = pb_linux_phoneblock_check(
                     phoneblock_base_url, phoneblock_token, number, 4, 10, &check);
                 if (phone_result == 0 && check.verdict != VERDICT_SPAM) {
+                    pb_linux_sip_stats_passed();
                     response_status = 486;
                     response_reason = "Busy Here";
                 } else if (phone_result == 0 && check.verdict == VERDICT_SPAM) {
+                    pb_linux_sip_stats_spam();
                     spam_call = 1;
                     parse_sdp_connection_ip(packet, length, remote_rtp_ip,
                                              sizeof(remote_rtp_ip));
@@ -203,10 +207,12 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                                               rtp_port, sdp_answer,
                                               sizeof(sdp_answer));
                 }
+                if (phone_result != 0) pb_linux_sip_stats_error();
                 pb_log_info("sip", "INVITE %s classified as %s",
                             number, phone_result == 0
                                 && check.verdict == VERDICT_SPAM ? "SPAM" : "not SPAM");
             } else {
+                pb_linux_sip_stats_error();
                 response_status = 486;
                 response_reason = "Busy Here";
             }

@@ -32,7 +32,8 @@ static void *server_thread(void *unused)
                       (struct sockaddr *)&peer, &peer_length);
     server_result = server_result && length > 0
         && strstr(request, "Authorization: Digest")
-        && strstr(request, "response=\"");
+        && strstr(request, "response=\"")
+        && strstr(request, "CSeq: 2 REGISTER");
     const char success_response[] = "SIP/2.0 200 OK\r\nContent-Length: 0\r\n\r\n";
     sendto(server_socket, success_response, sizeof(success_response) - 1, 0,
            (struct sockaddr *)&peer, peer_length);

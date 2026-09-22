@@ -142,6 +142,9 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
         if (!parsed.valid) {
             return -1;
         }
+        pb_log_info("sip", "SIP challenge: realm=%s qop=%s algorithm=%s",
+                    parsed.realm, parsed.qop[0] ? parsed.qop : "<none>",
+                    parsed.algorithm);
         char authorization[768];
         build_digest_authorization(host, user, password, auth_user, realm,
                        &parsed,
@@ -160,6 +163,10 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
         }
         response[response_length] = '\0';
         *status = parse_status_code(response, response_length);
+        if (*status != 200) {
+            pb_log_warn("sip", "authenticated SIP REGISTER rejected with status %d",
+                        *status);
+        }
     }
     return 0;
 }

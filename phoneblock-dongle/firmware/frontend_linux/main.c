@@ -141,7 +141,8 @@ int main(int argc, char **argv)
     if (listen_sip) {
         int result = pb_linux_sip_listen(
             config.sip_host, config.sip_port, config.sip_user,
-            config.sip_local_port, &shutdown_requested);
+            config.sip_local_port, config.phoneblock_base_url,
+            config.phoneblock_token, &shutdown_requested);
         if (result != 0) return EXIT_FAILURE;
         pb_log_info("linux", "SIP listener stopped");
         return EXIT_SUCCESS;

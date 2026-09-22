@@ -1,14 +1,18 @@
 #include "sip_server_linux.h"
 
+#include "platform.h"
 #include "sip_parse.h"
 #include "sip_response.h"
 #include "sip_transport.h"
+#include "phoneblock_api_linux.h"
 
 #include <stdio.h>
 #include <string.h>
 
 int pb_linux_sip_listen(const char *host, int port, const char *user,
-                        int local_port, volatile sig_atomic_t *stop_requested)
+                        int local_port, const char *phoneblock_base_url,
+                        const char *phoneblock_token,
+                        volatile sig_atomic_t *stop_requested)
 {
     if (!host || !user || !stop_requested) return -1;
     sip_transport_t *transport = sip_transport_open("udp", host, port,
@@ -28,8 +32,36 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         if (strcmp(method, "OPTIONS") != 0 && strcmp(method, "INVITE") != 0) {
             continue;
         }
+        int response_status = 200;
+        const char *response_reason = "OK";
+        if (strcmp(method, "INVITE") == 0) {
+            const char *from = find_header(packet, length, "From");
+            char from_value[512];
+            char uri[256];
+            char number[128];
+            int phone_result = -1;
+            if (from) {
+                header_value(from, packet + length, from_value, sizeof(from_value));
+                parse_uri(from_value, (int)strlen(from_value), uri, sizeof(uri));
+                user_from_uri(uri, number, sizeof(number));
+                normalize_e164(number, number, sizeof(number), "+49");
+                pb_check_result_t check;
+                phone_result = pb_linux_phoneblock_check(
+                    phoneblock_base_url, phoneblock_token, number, 4, 10, &check);
+                if (phone_result == 0 && check.verdict != VERDICT_SPAM) {
+                    response_status = 486;
+                    response_reason = "Busy Here";
+                }
+                pb_log_info("sip", "INVITE %s classified as %s",
+                            number, phone_result == 0
+                                && check.verdict == VERDICT_SPAM ? "SPAM" : "not SPAM");
+            } else {
+                response_status = 486;
+                response_reason = "Busy Here";
+            }
+        }
         int response_length = sip_response_build(
-            packet, length, 200, "OK", "linux", NULL, user,
+            packet, length, response_status, response_reason, "linux", NULL, user,
             sip_transport_local_ip(transport),
             sip_transport_local_port(transport), response, sizeof(response));
         if (response_length > 0) {

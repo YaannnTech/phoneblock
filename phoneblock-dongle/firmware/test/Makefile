@@ -123,6 +123,7 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 				  ../frontend_linux/sip_transport_linux.c ../main/sip_transport.h \
 				  ../frontend_linux/sip_register_linux.c ../frontend_linux/sip_register_linux.h \
 				  ../frontend_linux/sip_server_linux.c ../frontend_linux/sip_server_linux.h \
+				  ../frontend_linux/phoneblock_api_linux.c \
 				  ../main/sip_response.c ../main/sip_response.h \
 				  ../main/sip_auth.c ../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
 				  ../main/api_scan.c ../main/api_scan.h ../core/platform_linux.c ../core/platform.h
@@ -132,7 +133,8 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 	../frontend_linux/sip_transport_linux.c ../main/api_scan.c \
 	../frontend_linux/sip_register_linux.c ../main/sip_auth.c \
 	../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
-	../frontend_linux/sip_server_linux.c ../main/sip_response.c \
+	../frontend_linux/sip_server_linux.c ../frontend_linux/phoneblock_api_linux.c \
+	../main/sip_response.c \
 	$(CJSON_DIR)/cJSON.c ../core/platform_linux.c \
 	-I$(CJSON_DIR) $$(pkg-config --cflags --libs libcurl openssl) -o $@
 

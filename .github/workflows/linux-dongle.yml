@@ -26,3 +26,25 @@ jobs:
         run: make phoneblock_linux
       - name: Run host suite
         run: make test
+
+  debian-package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: phoneblock-dongle
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debhelper dpkg-dev libcjson-dev libcurl4-openssl-dev libssl-dev
+      - name: Build Debian package
+        run: dpkg-buildpackage -us -uc
+      - name: Upload Debian artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoneblock-dongle-debian
+          path: |
+            phoneblock-dongle_*.deb
+            phoneblock-dongle_*.buildinfo
+            phoneblock-dongle_*.changes

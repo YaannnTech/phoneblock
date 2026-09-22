@@ -69,6 +69,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     char packet[8192];
     char response[4096];
     struct sockaddr_in peer;
+    rtp_stream_args_t *pending_rtp = NULL;
     while (!*stop_requested) {
         int length = sip_transport_recv(transport, 500, packet,
                                          sizeof(packet) - 1, &peer);
@@ -78,6 +79,16 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         parse_method(packet, length, method, sizeof(method));
         if (strcmp(method, "ACK") == 0) {
             pb_log_info("sip", "ACK received");
+            if (pending_rtp) {
+                pthread_t thread;
+                if (pthread_create(&thread, NULL, rtp_stream_thread, pending_rtp) == 0) {
+                    pthread_detach(thread);
+                    pending_rtp = NULL;
+                } else {
+                    free(pending_rtp);
+                    pending_rtp = NULL;
+                }
+            }
             continue;
         }
         if (strcmp(method, "BYE") == 0) {
@@ -137,6 +148,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             sip_transport_send_to(transport, &peer, response, response_length);
             if (spam_call && remote_rtp_ip[0] && remote_rtp_port > 0
                     && announcement_path && announcement_path[0]) {
+                free(pending_rtp);
+                pending_rtp = NULL;
                 rtp_stream_args_t *args = calloc(1, sizeof(*args));
                 if (args) {
                     snprintf(args->host, sizeof(args->host), "%s", remote_rtp_ip);
@@ -163,16 +176,12 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                         header_value(call_id, packet + length, value, sizeof(value));
                         snprintf(args->call_id, sizeof(args->call_id), "%s", value);
                     }
-                    pthread_t thread;
-                    if (pthread_create(&thread, NULL, rtp_stream_thread, args) == 0) {
-                        pthread_detach(thread);
-                    } else {
-                        free(args);
-                    }
+                    pending_rtp = args;
                 }
             }
         }
     }
+    free(pending_rtp);
     sip_transport_close(transport);
     return 0;
 }

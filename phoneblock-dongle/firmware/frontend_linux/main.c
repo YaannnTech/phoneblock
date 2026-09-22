@@ -22,6 +22,7 @@ typedef struct {
     const char *bind_host;
     const char *sip_host;
     int sip_port;
+    const char *config_path;
     volatile sig_atomic_t *stop_requested;
 } web_thread_args_t;
 
@@ -29,7 +30,7 @@ static void *web_thread(void *opaque)
 {
     web_thread_args_t *args = opaque;
     pb_linux_web_serve(args->port, args->bind_host, args->sip_host,
-                       args->sip_port, args->stop_requested);
+                       args->sip_port, args->config_path, args->stop_requested);
     free(args);
     return NULL;
 }
@@ -194,6 +195,7 @@ int main(int argc, char **argv)
     if (web_port > 0 && !service_mode && !listen_sip) {
         return pb_linux_web_serve(web_port, web_bind,
                                   config.sip_host, config.sip_port,
+                                  config_path,
                                   &shutdown_requested);
     }
     if (web_port > 0 && (service_mode || listen_sip)) {
@@ -203,6 +205,7 @@ int main(int argc, char **argv)
         args->bind_host = web_bind;
         args->sip_host = config.sip_host;
         args->sip_port = config.sip_port;
+        args->config_path = config_path;
         args->stop_requested = &shutdown_requested;
         pthread_t thread;
         if (pthread_create(&thread, NULL, web_thread, args) != 0) {

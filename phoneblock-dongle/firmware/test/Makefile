@@ -123,9 +123,11 @@ test_sip_dialog_linux: test_sip_dialog_linux.c ../frontend_linux/sip_dialog_linu
 	$(CC) $(CFLAGS) -I../frontend_linux test_sip_dialog_linux.c \
 	../frontend_linux/sip_dialog_linux.c -o $@
 
-test_web_linux: test_web_linux.c ../frontend_linux/web_linux.c ../frontend_linux/web_linux.h
+test_web_linux: test_web_linux.c ../frontend_linux/web_linux.c ../frontend_linux/web_linux.h \
+		../frontend_linux/config_linux.c ../frontend_linux/config_file.c
 	$(CC) $(CFLAGS) -pthread -I../frontend_linux test_web_linux.c \
-		../frontend_linux/web_linux.c -o $@
+	../frontend_linux/web_linux.c ../frontend_linux/config_linux.c \
+	../frontend_linux/config_file.c -o $@
 
 phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 		  ../frontend_linux/config_linux.h ../frontend_linux/config_file.c \

@@ -70,6 +70,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     char response[4096];
     struct sockaddr_in peer;
     rtp_stream_args_t *pending_rtp = NULL;
+    char active_call_id[256] = "";
     while (!*stop_requested) {
         int length = sip_transport_recv(transport, 500, packet,
                                          sizeof(packet) - 1, &peer);
@@ -85,6 +86,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             pb_log_info("sip", "ACK received%s",
                         matching_ack ? " for active dialog" : " for unknown dialog");
             if (matching_ack) {
+                snprintf(active_call_id, sizeof(active_call_id), "%s",
+                         pending_rtp->call_id);
                 pthread_t thread;
                 if (pthread_create(&thread, NULL, rtp_stream_thread, pending_rtp) == 0) {
                     pthread_detach(thread);
@@ -99,8 +102,9 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         if (strcmp(method, "BYE") == 0) {
             char bye_call_id[256];
             parse_call_id(packet, length, bye_call_id, sizeof(bye_call_id));
-            bool matching_bye = pending_rtp && bye_call_id[0]
-                && strcmp(bye_call_id, pending_rtp->call_id) == 0;
+            bool matching_bye = bye_call_id[0]
+                && ((pending_rtp && strcmp(bye_call_id, pending_rtp->call_id) == 0)
+                    || (active_call_id[0] && strcmp(bye_call_id, active_call_id) == 0));
             int bye_response_length = sip_response_build(
                 packet, length, matching_bye ? 200 : 481,
                 matching_bye ? "OK" : "Call/Transaction Does Not Exist",
@@ -113,6 +117,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             if (matching_bye) {
                 free(pending_rtp);
                 pending_rtp = NULL;
+                active_call_id[0] = '\0';
             }
             continue;
         }
@@ -165,6 +170,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     && announcement_path && announcement_path[0]) {
                 free(pending_rtp);
                 pending_rtp = NULL;
+                active_call_id[0] = '\0';
                 rtp_stream_args_t *args = calloc(1, sizeof(*args));
                 if (args) {
                     snprintf(args->host, sizeof(args->host), "%s", remote_rtp_ip);

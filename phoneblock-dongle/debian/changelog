@@ -1,4 +1,4 @@
-phoneblock-dongle (0.1.0-1) unstable; urgency=low
+phoneblock-dongle (0.1.0) unstable; urgency=low
 
   * Initial Linux SIP dongle package.
 

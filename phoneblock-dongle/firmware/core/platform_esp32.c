@@ -72,6 +72,7 @@ void pb_task_yield(void)
 typedef struct {
     void (*fn)(void *);
     void *arg;
+    pb_task_t *task;
 } pb_task_start_t;
 
 static void pb_task_start(void *opaque)
@@ -79,6 +80,7 @@ static void pb_task_start(void *opaque)
     pb_task_start_t start = *(pb_task_start_t *)opaque;
     free(opaque);
     start.fn(start.arg);
+    free(start.task);
     vTaskDelete(NULL);
 }
 
@@ -96,6 +98,7 @@ pb_task_t *pb_task_create(void (*fn)(void *), void *arg,
     }
     start->fn = fn;
     start->arg = arg;
+    start->task = task;
 
     uint32_t stack_words = (uint32_t)((stack_bytes + sizeof(StackType_t) - 1)
                                       / sizeof(StackType_t));

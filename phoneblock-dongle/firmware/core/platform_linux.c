@@ -98,6 +98,7 @@ void pb_task_yield(void)
 typedef struct {
     void (*fn)(void *);
     void *arg;
+    pb_task_t *task;
 } pb_task_start_t;
 
 static void *pb_task_start(void *opaque)
@@ -105,6 +106,7 @@ static void *pb_task_start(void *opaque)
     pb_task_start_t start = *(pb_task_start_t *)opaque;
     free(opaque);
     start.fn(start.arg);
+    free(start.task);
     return NULL;
 }
 
@@ -123,6 +125,7 @@ pb_task_t *pb_task_create(void (*fn)(void *), void *arg,
     }
     start->fn = fn;
     start->arg = arg;
+    start->task = task;
 
     pthread_attr_t attributes;
     if (pthread_attr_init(&attributes) != 0) {

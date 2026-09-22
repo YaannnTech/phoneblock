@@ -18,6 +18,7 @@ static volatile sig_atomic_t shutdown_requested;
 
 typedef struct {
     int port;
+    const char *bind_host;
     const char *sip_host;
     int sip_port;
     volatile sig_atomic_t *stop_requested;
@@ -26,7 +27,7 @@ typedef struct {
 static void *web_thread(void *opaque)
 {
     web_thread_args_t *args = opaque;
-    pb_linux_web_serve(args->port, "127.0.0.1", args->sip_host,
+    pb_linux_web_serve(args->port, args->bind_host, args->sip_host,
                        args->sip_port, args->stop_requested);
     free(args);
     return NULL;
@@ -54,7 +55,7 @@ static void print_usage(const char *program)
 {
     fprintf(stderr, "Usage: %s [--config PATH] [--foreground] [--check-config] "
                     "[--check-number NUMBER] [--probe-sip] [--register-sip] "
-                    "[--service] [--listen-sip] [--web PORT]\n",
+                    "[--service] [--listen-sip] [--web PORT] [--web-bind HOST]\n",
             program);
 }
 
@@ -67,6 +68,7 @@ int main(int argc, char **argv)
     int service_mode = 0;
     int listen_sip = 0;
     int web_port = 0;
+    const char *web_bind = "127.0.0.1";
     int check_config = 0;
 
     static const struct option options[] = {
@@ -79,10 +81,11 @@ int main(int argc, char **argv)
         { "service", no_argument, NULL, 's' },
         { "listen-sip", no_argument, NULL, 'l' },
         { "web", required_argument, NULL, 'w' },
+        { "web-bind", required_argument, NULL, 'b' },
         { NULL, 0, NULL, 0 }
     };
     int option;
-    while ((option = getopt_long(argc, argv, "c:ftn:prslw:", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:ftn:prslw:b:", options, NULL)) != -1) {
         switch (option) {
             case 'c': config_path = optarg; break;
             case 'f': break;
@@ -93,6 +96,7 @@ int main(int argc, char **argv)
             case 's': service_mode = 1; break;
             case 'l': listen_sip = 1; break;
             case 'w': web_port = atoi(optarg); break;
+            case 'b': web_bind = optarg; break;
             default:
                 print_usage(argv[0]);
                 return EXIT_FAILURE;
@@ -160,7 +164,7 @@ int main(int argc, char **argv)
     sigaction(SIGTERM, &action, NULL);
     pb_log_info("linux", "service skeleton running");
     if (web_port > 0 && !service_mode && !listen_sip) {
-        return pb_linux_web_serve(web_port, "127.0.0.1",
+        return pb_linux_web_serve(web_port, web_bind,
                                   config.sip_host, config.sip_port,
                                   &shutdown_requested);
     }
@@ -168,6 +172,7 @@ int main(int argc, char **argv)
         web_thread_args_t *args = calloc(1, sizeof(*args));
         if (!args) return EXIT_FAILURE;
         args->port = web_port;
+        args->bind_host = web_bind;
         args->sip_host = config.sip_host;
         args->sip_port = config.sip_port;
         args->stop_requested = &shutdown_requested;

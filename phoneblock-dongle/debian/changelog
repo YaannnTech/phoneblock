@@ -1,0 +1,5 @@
+phoneblock-dongle (0.1.0-1) unstable; urgency=low
+
+  * Initial Linux SIP dongle package.
+
+ -- PhoneBlock contributors <maintainers@phoneblock.net>  Tue, 22 Sep 2026 12:00:00 +0000

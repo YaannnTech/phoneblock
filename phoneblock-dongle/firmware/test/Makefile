@@ -113,7 +113,8 @@ test_sip_register_linux: test_sip_register_linux.c ../frontend_linux/sip_registe
 	$(CC) $(CFLAGS) -I../frontend_linux -pthread test_sip_register_linux.c \
 	../frontend_linux/sip_register_linux.c ../main/sip_auth.c \
 	../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
-	../frontend_linux/sip_transport_linux.c ../core/platform_linux.c -o $@
+	../frontend_linux/sip_transport_linux.c ../core/platform_linux.c \
+	$$(pkg-config --cflags --libs openssl) -o $@
 
 phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 		  ../frontend_linux/config_linux.h ../frontend_linux/config_file.c \

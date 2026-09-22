@@ -2,6 +2,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -21,12 +22,20 @@ static void *server_thread(void *unused)
                               (struct sockaddr *)&peer, &peer_length);
     server_result = length > 0 && strstr(request, "REGISTER sip:127.0.0.1")
         && strstr(request, "Content-Length: 0");
-    const char response[] =
+    const char challenge_response[] =
         "SIP/2.0 401 Unauthorized\r\n"
         "WWW-Authenticate: Digest realm=\"fritz.box\", nonce=\"abc123\"\r\n"
         "Content-Length: 0\r\n\r\n";
-        sendto(server_socket, response, sizeof(response) - 1, 0,
-            (struct sockaddr *)&peer, peer_length);
+    sendto(server_socket, challenge_response, sizeof(challenge_response) - 1, 0,
+           (struct sockaddr *)&peer, peer_length);
+    length = recvfrom(server_socket, request, sizeof(request) - 1, 0,
+                      (struct sockaddr *)&peer, &peer_length);
+    server_result = server_result && length > 0
+        && strstr(request, "Authorization: Digest")
+        && strstr(request, "response=\"");
+    const char success_response[] = "SIP/2.0 200 OK\r\nContent-Length: 0\r\n\r\n";
+    sendto(server_socket, success_response, sizeof(success_response) - 1, 0,
+           (struct sockaddr *)&peer, peer_length);
     return NULL;
 }
 
@@ -34,8 +43,6 @@ int main(void)
 {
     server_socket = socket(AF_INET, SOCK_DGRAM, 0);
     assert(server_socket >= 0);
-    int reuse = 1;
-    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     struct sockaddr_in address = {
         .sin_family = AF_INET,
         .sin_addr.s_addr = htonl(INADDR_LOOPBACK),
@@ -49,9 +56,9 @@ int main(void)
     int status;
     char challenge[256];
     assert(pb_linux_sip_register_probe("127.0.0.1", ntohs(address.sin_port),
-                                       "620", 0, &status, challenge,
+                                       "620", "secret", 0, &status, challenge,
                                        sizeof(challenge)) == 0);
-    assert(status == 401);
+    assert(status == 200);
     assert(strstr(challenge, "realm=\"fritz.box\"") != NULL);
     pthread_join(thread, NULL);
     assert(server_result);

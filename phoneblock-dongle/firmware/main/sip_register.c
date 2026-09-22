@@ -1734,7 +1734,7 @@ static void sip_task(void *arg)
         }
         s_registered = false;
         stats_record_sip_state(false);
-        vTaskDelay(pdMS_TO_TICKS(open_retry_s * 1000));
+        pb_task_sleep_ms((uint32_t)open_retry_s * 1000u);
     }
     if (strcmp(dial_host, config_sip_host()) != 0) {
         const char *via = (outbound && outbound[0]) ? "outbound proxy" : "SRV";
@@ -1772,7 +1772,7 @@ static void sip_task(void *arg)
     // on every Save is bad UX.
     if (s_settle_pending) {
         s_settle_pending = false;
-        vTaskDelay(pdMS_TO_TICKS(1500));
+        pb_task_sleep_ms(1500);
     }
 
     // Initial registration. Any failure here is surfaced immediately —
@@ -1807,7 +1807,6 @@ static void sip_task(void *arg)
     if (!rx) {
         ESP_LOGE(TAG, "malloc rx buffer failed — aborting SIP task");
         s_sip_task = NULL;
-        return;
         return;
     }
 
@@ -1891,7 +1890,7 @@ static void sip_task(void *arg)
             // "Verbinde…" state clears within ~500 ms after Save.
             if (s_settle_pending) {
                 s_settle_pending = false;
-                vTaskDelay(pdMS_TO_TICKS(1500));
+                pb_task_sleep_ms(1500);
             }
             // Config-reload register: like the initial one, surface any
             // failure directly — the user just hit Save and is waiting
@@ -1974,7 +1973,7 @@ static void sip_task(void *arg)
         int n = sip_transport_recv(ctx.transport, (int)(remaining_us / 1000),
                                    rx, SIP_RX_BUF_SIZE - 1, &from);
         if (n < 0) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            pb_task_sleep_ms(1000);
             continue;
         }
 

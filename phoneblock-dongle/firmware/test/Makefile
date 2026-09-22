@@ -81,6 +81,13 @@ test_config_linux: test_config_linux.c ../frontend_linux/config_linux.c ../front
 	$(CC) $(CFLAGS) -I../frontend_linux test_config_linux.c ../frontend_linux/config_linux.c \
         ../frontend_linux/config_file.c -o $@
 
+phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
+		  ../frontend_linux/config_linux.h ../frontend_linux/config_file.c \
+		  ../frontend_linux/config_file.h ../core/platform_linux.c ../core/platform.h
+	$(CC) $(CFLAGS) -I../frontend_linux -pthread ../frontend_linux/main.c \
+	../frontend_linux/config_linux.c ../frontend_linux/config_file.c \
+	../core/platform_linux.c -o $@
+
 # strbuf.h is header-only; build its test with AddressSanitizer so any overrun
 # of the (malloc'd) destination buffer aborts.
 test_strbuf: test_strbuf.c ../main/strbuf.h

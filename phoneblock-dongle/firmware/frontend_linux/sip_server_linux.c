@@ -97,12 +97,22 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             continue;
         }
         if (strcmp(method, "BYE") == 0) {
+            char bye_call_id[256];
+            parse_call_id(packet, length, bye_call_id, sizeof(bye_call_id));
+            bool matching_bye = pending_rtp && bye_call_id[0]
+                && strcmp(bye_call_id, pending_rtp->call_id) == 0;
             int bye_response_length = sip_response_build(
-                packet, length, 200, "OK", "linux", NULL, user,
+                packet, length, matching_bye ? 200 : 481,
+                matching_bye ? "OK" : "Call/Transaction Does Not Exist",
+                "linux", NULL, user,
                 sip_transport_local_ip(transport),
                 sip_transport_local_port(transport), response, sizeof(response));
             if (bye_response_length > 0) {
                 sip_transport_send_to(transport, &peer, response, bye_response_length);
+            }
+            if (matching_bye) {
+                free(pending_rtp);
+                pending_rtp = NULL;
             }
             continue;
         }

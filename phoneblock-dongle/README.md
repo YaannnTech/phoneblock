@@ -227,6 +227,8 @@ zentrale Instanz Daten sammelt und Spammer aktiv bindet.
 - **[PROVIDERS.md](PROVIDERS.md)** — SIP-Parameter und
   Setup-Stolperfallen für die gängigen deutschen VoIP-Anbieter.
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** — ESP-IDF + QEMU-Setup.
+- **[LINUX-VALIDATION.md](LINUX-VALIDATION.md)** — manual Linux/Fritz!Box
+  validation checklist.
 - **[firmware/README.md](firmware/README.md)** — Testszenarien im
   Emulator, Konfigurationsdetails.
 - **[LEGAL.md](LEGAL.md)** — Rechtliche Hinweise zur Nutzung.

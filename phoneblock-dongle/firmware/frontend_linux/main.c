@@ -4,6 +4,7 @@
 #include "sip_register_linux.h"
 #include "sip_server_linux.h"
 #include "sip_transport.h"
+#include "tr064_provision_linux.h"
 #include "web_linux.h"
 
 #include <getopt.h>
@@ -55,7 +56,8 @@ static void print_usage(const char *program)
 {
     fprintf(stderr, "Usage: %s [--config PATH] [--foreground] [--check-config] "
                     "[--check-number NUMBER] [--probe-sip] [--register-sip] "
-                    "[--service] [--listen-sip] [--web PORT] [--web-bind HOST]\n",
+                    "[--service] [--listen-sip] [--web PORT] [--web-bind HOST] "
+                    "[--provision-sip]\n",
             program);
 }
 
@@ -65,6 +67,7 @@ int main(int argc, char **argv)
     const char *check_number = NULL;
     int probe_sip = 0;
     int register_sip = 0;
+    int provision_sip = 0;
     int service_mode = 0;
     int listen_sip = 0;
     int web_port = 0;
@@ -78,6 +81,7 @@ int main(int argc, char **argv)
         { "check-number", required_argument, NULL, 'n' },
         { "probe-sip", no_argument, NULL, 'p' },
         { "register-sip", no_argument, NULL, 'r' },
+        { "provision-sip", no_argument, NULL, 'v' },
         { "service", no_argument, NULL, 's' },
         { "listen-sip", no_argument, NULL, 'l' },
         { "web", required_argument, NULL, 'w' },
@@ -85,7 +89,7 @@ int main(int argc, char **argv)
         { NULL, 0, NULL, 0 }
     };
     int option;
-    while ((option = getopt_long(argc, argv, "c:ftn:prslw:b:", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:ftn:prvslw:b:", options, NULL)) != -1) {
         switch (option) {
             case 'c': config_path = optarg; break;
             case 'f': break;
@@ -93,6 +97,7 @@ int main(int argc, char **argv)
             case 'n': check_number = optarg; break;
             case 'p': probe_sip = 1; break;
             case 'r': register_sip = 1; break;
+            case 'v': provision_sip = 1; break;
             case 's': service_mode = 1; break;
             case 'l': listen_sip = 1; break;
             case 'w': web_port = atoi(optarg); break;
@@ -154,6 +159,27 @@ int main(int argc, char **argv)
         }
         pb_log_info("linux", "SIP REGISTER completed with status %d", status);
         return status == 200 ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (provision_sip) {
+        pb_tr064_sip_credentials_t credentials;
+        if (pb_tr064_provision_sip(
+                config.fritzbox_host, config.fritzbox_port,
+                config.fritzbox_admin_user, config.fritzbox_admin_pass,
+                config.fritzbox_phone_name, &credentials) != 0) {
+            pb_log_err("tr064", "Fritz!Box SIP provisioning failed");
+            return EXIT_FAILURE;
+        }
+        snprintf(config.sip_host, sizeof(config.sip_host), "%s", config.fritzbox_host);
+        config.sip_port = 5060;
+        snprintf(config.sip_user, sizeof(config.sip_user), "%s", credentials.sip_user);
+        snprintf(config.sip_pass, sizeof(config.sip_pass), "%s", credentials.sip_pass);
+        if (pb_linux_config_save(config_path, &config) != 0) {
+            pb_log_err("linux", "could not persist provisioned SIP credentials");
+            return EXIT_FAILURE;
+        }
+        pb_log_info("tr064", "provisioned SIP user %s, internal number %s",
+                    credentials.sip_user, credentials.internal_number);
+        return EXIT_SUCCESS;
     }
 
     if (check_config) return EXIT_SUCCESS;

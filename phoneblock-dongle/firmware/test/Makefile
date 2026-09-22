@@ -133,6 +133,7 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 		  ../frontend_linux/phoneblock_api_linux.h ../frontend_linux/http_client_linux.c \
 				  ../frontend_linux/sip_transport_linux.c ../main/sip_transport.h \
 				  ../frontend_linux/sip_register_linux.c ../frontend_linux/sip_register_linux.h \
+				  ../frontend_linux/tr064_provision_linux.c ../frontend_linux/tr064_provision_linux.h \
 				  ../frontend_linux/sip_server_linux.c ../frontend_linux/sip_server_linux.h \
 				  ../frontend_linux/sip_dialog_linux.c ../frontend_linux/sip_dialog_linux.h \
 				  ../frontend_linux/web_linux.c ../frontend_linux/web_linux.h \
@@ -146,6 +147,7 @@ phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 	../frontend_linux/phoneblock_api_linux.c ../frontend_linux/http_client_linux.c \
 	../frontend_linux/sip_transport_linux.c ../main/api_scan.c \
 	../frontend_linux/sip_register_linux.c ../main/sip_auth.c \
+	../frontend_linux/tr064_provision_linux.c \
 	../core/sip_parse.c ../core/dial_rules.c ../main/audio.c \
 	../frontend_linux/sip_server_linux.c \
 	../frontend_linux/sip_dialog_linux.c \

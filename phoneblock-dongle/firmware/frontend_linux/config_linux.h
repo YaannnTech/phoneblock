@@ -13,6 +13,11 @@ typedef struct {
     char phoneblock_base_url[128];
     char phoneblock_token[128];
     char announcement_path[256];
+    char fritzbox_host[128];
+    int fritzbox_port;
+    char fritzbox_admin_user[64];
+    char fritzbox_admin_pass[128];
+    char fritzbox_phone_name[64];
 } pb_linux_config_t;
 
 void pb_linux_config_defaults(pb_linux_config_t *config);

@@ -23,6 +23,10 @@ void pb_linux_config_defaults(pb_linux_config_t *config)
                "https://phoneblock.net/phoneblock");
     copy_value(config->announcement_path, sizeof(config->announcement_path),
                "/usr/share/phoneblock/announcement.alaw");
+    copy_value(config->fritzbox_host, sizeof(config->fritzbox_host), "fritz.box");
+    config->fritzbox_port = 49000;
+    copy_value(config->fritzbox_phone_name, sizeof(config->fritzbox_phone_name),
+               "PhoneBlock");
 }
 
 int pb_linux_config_load(const char *path, pb_linux_config_t *config)
@@ -63,6 +67,14 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
         copy_value(config->announcement_path,
                    sizeof(config->announcement_path), value);
     }
+    if (pb_config_file_get(&file, "fritzbox_host", value, sizeof(value)) == 1)
+        copy_value(config->fritzbox_host, sizeof(config->fritzbox_host), value);
+    if (pb_config_file_get(&file, "fritzbox_admin_user", value, sizeof(value)) == 1)
+        copy_value(config->fritzbox_admin_user, sizeof(config->fritzbox_admin_user), value);
+    if (pb_config_file_get(&file, "fritzbox_admin_pass", value, sizeof(value)) == 1)
+        copy_value(config->fritzbox_admin_pass, sizeof(config->fritzbox_admin_pass), value);
+    if (pb_config_file_get(&file, "fritzbox_phone_name", value, sizeof(value)) == 1)
+        copy_value(config->fritzbox_phone_name, sizeof(config->fritzbox_phone_name), value);
     config->sip_port = pb_config_file_get_int(&file, "sip_port",
                                                config->sip_port, 1, 65535);
     config->sip_expires = pb_config_file_get_int(&file, "sip_expires",
@@ -72,6 +84,8 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
                                                      1, 65535);
     config->rtp_port = pb_config_file_get_int(&file, "rtp_port",
                                                config->rtp_port, 1, 65535);
+    config->fritzbox_port = pb_config_file_get_int(&file, "fritzbox_port",
+                                                    config->fritzbox_port, 1, 65535);
     return 0;
 }
 
@@ -98,7 +112,11 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
             || pb_config_file_set(&file, "phoneblock_token",
                                   config->phoneblock_token) != 0
             || pb_config_file_set(&file, "announcement_path",
-                                  config->announcement_path) != 0) {
+                                  config->announcement_path) != 0
+            || pb_config_file_set(&file, "fritzbox_host", config->fritzbox_host) != 0
+            || pb_config_file_set(&file, "fritzbox_admin_user", config->fritzbox_admin_user) != 0
+            || pb_config_file_set(&file, "fritzbox_admin_pass", config->fritzbox_admin_pass) != 0
+            || pb_config_file_set(&file, "fritzbox_phone_name", config->fritzbox_phone_name) != 0) {
         return -1;
     }
     snprintf(number, sizeof(number), "%d", config->sip_port);
@@ -109,5 +127,7 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
     if (pb_config_file_set(&file, "sip_local_port", number) != 0) return -1;
     snprintf(number, sizeof(number), "%d", config->rtp_port);
     if (pb_config_file_set(&file, "rtp_port", number) != 0) return -1;
+    snprintf(number, sizeof(number), "%d", config->fritzbox_port);
+    if (pb_config_file_set(&file, "fritzbox_port", number) != 0) return -1;
     return pb_config_file_save(path, &file);
 }

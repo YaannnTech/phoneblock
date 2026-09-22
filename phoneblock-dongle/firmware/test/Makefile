@@ -102,10 +102,14 @@ test_phoneblock_api_linux: test_phoneblock_api_linux.c ../frontend_linux/phonebl
 
 phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 		  ../frontend_linux/config_linux.h ../frontend_linux/config_file.c \
-		  ../frontend_linux/config_file.h ../core/platform_linux.c ../core/platform.h
+		  ../frontend_linux/config_file.h ../frontend_linux/phoneblock_api_linux.c \
+		  ../frontend_linux/phoneblock_api_linux.h ../frontend_linux/http_client_linux.c \
+		  ../main/api_scan.c ../main/api_scan.h ../core/platform_linux.c ../core/platform.h
 	$(CC) $(CFLAGS) -I../frontend_linux -pthread ../frontend_linux/main.c \
 	../frontend_linux/config_linux.c ../frontend_linux/config_file.c \
-	../core/platform_linux.c -o $@
+	../frontend_linux/phoneblock_api_linux.c ../frontend_linux/http_client_linux.c \
+	../main/api_scan.c $(CJSON_DIR)/cJSON.c ../core/platform_linux.c \
+	-I$(CJSON_DIR) $$(pkg-config --cflags --libs libcurl openssl) -o $@
 
 # strbuf.h is header-only; build its test with AddressSanitizer so any overrun
 # of the (malloc'd) destination buffer aborts.

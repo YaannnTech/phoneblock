@@ -10,6 +10,8 @@ typedef struct {
     int sip_expires;
     int sip_local_port;
     int rtp_port;
+    char phoneblock_base_url[128];
+    char phoneblock_token[128];
 } pb_linux_config_t;
 
 void pb_linux_config_defaults(pb_linux_config_t *config);

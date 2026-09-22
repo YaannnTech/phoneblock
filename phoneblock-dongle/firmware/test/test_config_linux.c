@@ -14,10 +14,15 @@ int main(void)
     assert(config.sip_port == 5060);
     assert(config.sip_local_port == 15060);
     assert(config.rtp_port == 16000);
+    assert(strcmp(config.phoneblock_base_url,
+                  "https://phoneblock.net/phoneblock") == 0);
 
     snprintf(config.sip_host, sizeof(config.sip_host), "fritz.box");
     snprintf(config.sip_user, sizeof(config.sip_user), "620");
     snprintf(config.sip_pass, sizeof(config.sip_pass), "secret");
+    snprintf(config.phoneblock_base_url, sizeof(config.phoneblock_base_url),
+             "https://example.test/phoneblock");
+    snprintf(config.phoneblock_token, sizeof(config.phoneblock_token), "pbt_test");
     config.sip_expires = 1800;
     assert(pb_linux_config_save(path, &config) == 0);
 
@@ -28,6 +33,9 @@ int main(void)
     assert(strcmp(reloaded.sip_pass, "secret") == 0);
     assert(reloaded.sip_expires == 1800);
     assert(reloaded.rtp_port == 16000);
+    assert(strcmp(reloaded.phoneblock_base_url,
+                  "https://example.test/phoneblock") == 0);
+    assert(strcmp(reloaded.phoneblock_token, "pbt_test") == 0);
 
     remove(path);
     puts("test_config_linux: all tests passed");

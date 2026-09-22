@@ -94,3 +94,50 @@ void pb_http_response_free(pb_http_response_t *response)
     free(response->body);
     memset(response, 0, sizeof(*response));
 }
+
+int pb_http_post_xml(const char *url, const char *soap_action,
+                     const char *body, size_t maximum_body,
+                     pb_http_response_t *response)
+{
+    if (!url || !body || !response || maximum_body == 0) return -1;
+    memset(response, 0, sizeof(*response));
+    CURL *curl = curl_easy_init();
+    if (!curl) return -1;
+
+    response_buffer_t buffer = { .maximum = maximum_body };
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: text/xml; charset=\"utf-8\"");
+    if (soap_action) {
+        char action_header[512];
+        snprintf(action_header, sizeof(action_header), "SOAPAction: %s", soap_action);
+        headers = curl_slist_append(headers, action_header);
+    }
+    if (!headers) {
+        curl_easy_cleanup(curl);
+        return -1;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 5000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 15000L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_body);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
+
+    CURLcode result = curl_easy_perform(curl);
+    long status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK || buffer.overflow || !buffer.data) {
+        free(buffer.data);
+        return -1;
+    }
+    response->status = status;
+    response->body = buffer.data;
+    response->length = buffer.length;
+    return 0;
+}

@@ -14,4 +14,8 @@ typedef struct {
 int pb_http_get(const char *url, const char *bearer_token,
                 size_t maximum_body, pb_http_response_t *response);
 
+int pb_http_post_xml(const char *url, const char *soap_action,
+                     const char *body, size_t maximum_body,
+                     pb_http_response_t *response);
+
 void pb_http_response_free(pb_http_response_t *response);

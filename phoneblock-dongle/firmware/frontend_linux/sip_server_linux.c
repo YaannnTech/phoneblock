@@ -24,6 +24,7 @@ typedef struct {
     char from_header[512];
     char to_header[512];
     char call_id[256];
+    volatile sig_atomic_t *cancelled;
 } rtp_stream_args_t;
 
 static int build_bye(const rtp_stream_args_t *args, char *out, size_t capacity)
@@ -46,11 +47,13 @@ static void *rtp_stream_thread(void *opaque)
 {
     rtp_stream_args_t *args = opaque;
     pb_linux_rtp_stream_alaw(args->host, args->port, args->path,
-                             args->local_port, args->stop_requested);
-    char bye[2048];
-    int bye_length = build_bye(args, bye, sizeof(bye));
-    if (bye_length > 0 && (size_t)bye_length < sizeof(bye)) {
-        sip_transport_send_to(args->transport, &args->peer, bye, bye_length);
+                             args->local_port, args->cancelled);
+    if (!*args->cancelled) {
+        char bye[2048];
+        int bye_length = build_bye(args, bye, sizeof(bye));
+        if (bye_length > 0 && (size_t)bye_length < sizeof(bye)) {
+            sip_transport_send_to(args->transport, &args->peer, bye, bye_length);
+        }
     }
     free(args);
     return NULL;
@@ -71,6 +74,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     char response[4096];
     struct sockaddr_in peer;
     rtp_stream_args_t *pending_rtp = NULL;
+    volatile sig_atomic_t active_cancelled = 0;
     char active_call_id[256] = "";
     while (!*stop_requested) {
         int length = sip_transport_recv(transport, 500, packet,
@@ -92,6 +96,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                 pthread_t thread;
                 if (pthread_create(&thread, NULL, rtp_stream_thread, pending_rtp) == 0) {
                     pthread_detach(thread);
+                    active_cancelled = 0;
+                    pending_rtp->cancelled = &active_cancelled;
                     pending_rtp = NULL;
                 } else {
                     free(pending_rtp);
@@ -106,6 +112,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             bool matching_bye = bye_call_id[0]
                 && ((pending_rtp && strcmp(bye_call_id, pending_rtp->call_id) == 0)
                     || (active_call_id[0] && strcmp(bye_call_id, active_call_id) == 0));
+            if (matching_bye) active_cancelled = 1;
             int bye_response_length = sip_response_build(
                 packet, length, matching_bye ? 200 : 481,
                 matching_bye ? "OK" : "Call/Transaction Does Not Exist",
@@ -216,6 +223,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             }
         }
     }
+    if (pending_rtp) pending_rtp->cancelled = 1;
+    active_cancelled = 1;
     free(pending_rtp);
     sip_transport_close(transport);
     return 0;

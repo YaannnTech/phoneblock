@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_random.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -57,6 +58,21 @@ uint64_t pb_monotonic_us(void)
 uint32_t pb_random_u32(void)
 {
     return esp_random();
+}
+
+int pb_watchdog_is_subscribed(void)
+{
+    return esp_task_wdt_status(NULL) == ESP_OK;
+}
+
+void pb_watchdog_subscribe(void)
+{
+    esp_task_wdt_add(NULL);
+}
+
+void pb_watchdog_reset(void)
+{
+    esp_task_wdt_reset();
 }
 
 void pb_task_sleep_ms(uint32_t milliseconds)

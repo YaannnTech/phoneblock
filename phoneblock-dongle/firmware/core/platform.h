@@ -9,6 +9,9 @@ void pb_log_err(const char *tag, const char *fmt, ...);
 
 uint64_t pb_monotonic_us(void);
 uint32_t pb_random_u32(void);
+int pb_watchdog_is_subscribed(void);
+void pb_watchdog_subscribe(void);
+void pb_watchdog_reset(void);
 
 typedef struct pb_task pb_task_t;
 typedef struct pb_mutex pb_mutex_t;

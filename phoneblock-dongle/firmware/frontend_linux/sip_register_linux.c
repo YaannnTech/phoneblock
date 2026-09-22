@@ -134,15 +134,18 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                                              ? "WWW-Authenticate"
                                              : "Proxy-Authenticate");
         if (!header) {
+            pb_log_warn("sip", "SIP %d response has no authentication header",
+                        *status);
             return -1;
         }
         header_value(header, response + response_length, challenge, challenge_cap);
         auth_challenge_t parsed;
         sip_auth_parse_challenge(challenge, &parsed);
         if (!parsed.valid) {
+            pb_log_warn("sip", "SIP authentication challenge could not be parsed");
             return -1;
         }
-        pb_log_info("sip", "SIP challenge: realm=%s qop=%s algorithm=%s",
+        pb_log_warn("sip", "SIP challenge: realm=%s qop=%s algorithm=%s",
                     parsed.realm, parsed.qop[0] ? parsed.qop : "<none>",
                     parsed.algorithm);
         char authorization[768];

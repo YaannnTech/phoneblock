@@ -34,3 +34,13 @@ int pb_config_file_set(pb_config_file_t *config, const char *key,
 // Persist the current configuration atomically. The temporary file is created
 // beside `path`, then renamed over it so readers never observe a partial file.
 int pb_config_file_save(const char *path, const pb_config_file_t *config);
+
+// Read a decimal integer. Missing, malformed, or out-of-range values return
+// the supplied default.
+int pb_config_file_get_int(const pb_config_file_t *config, const char *key,
+                           int fallback, int minimum, int maximum);
+
+// Read a boolean written as 1/0, true/false, yes/no, or on/off. Missing or
+// unrecognized values return the supplied default.
+int pb_config_file_get_bool(const pb_config_file_t *config, const char *key,
+                            int fallback);

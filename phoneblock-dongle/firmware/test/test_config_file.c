@@ -34,6 +34,12 @@ int main(void)
     assert(strcmp(value, "fritzbox.local") == 0);
     assert(pb_config_file_get(&reloaded, "sip_port", value, sizeof(value)) == 1);
     assert(strcmp(value, "5060") == 0);
+    assert(pb_config_file_get_int(&reloaded, "sip_port", 15060, 1, 65535) == 5060);
+    assert(pb_config_file_get_int(&reloaded, "missing", 15060, 1, 65535) == 15060);
+    assert(pb_config_file_set(&reloaded, "enabled", "yes") == 0);
+    assert(pb_config_file_get_bool(&reloaded, "enabled", 0) == 1);
+    assert(pb_config_file_set(&reloaded, "enabled", "maybe") == 0);
+    assert(pb_config_file_get_bool(&reloaded, "enabled", 1) == 1);
 
     remove(path);
     puts("test_config_file: all tests passed");

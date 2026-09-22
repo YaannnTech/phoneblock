@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 static char *trim(char *text)
@@ -139,4 +140,38 @@ int pb_config_file_save(const char *path, const pb_config_file_t *config)
     if (result != 0) unlink(temporary_path);
     free(temporary_path);
     return result;
+}
+
+int pb_config_file_get_int(const pb_config_file_t *config, const char *key,
+                           int fallback, int minimum, int maximum)
+{
+    char value[PB_CONFIG_VALUE_CAP];
+    if (pb_config_file_get(config, key, value, sizeof(value)) != 1) {
+        return fallback;
+    }
+
+    char *end;
+    long parsed = strtol(value, &end, 10);
+    if (*value == '\0' || *end != '\0' || parsed < minimum || parsed > maximum) {
+        return fallback;
+    }
+    return (int)parsed;
+}
+
+int pb_config_file_get_bool(const pb_config_file_t *config, const char *key,
+                            int fallback)
+{
+    char value[PB_CONFIG_VALUE_CAP];
+    if (pb_config_file_get(config, key, value, sizeof(value)) != 1) {
+        return fallback;
+    }
+    if (!strcmp(value, "1") || !strcasecmp(value, "true")
+            || !strcasecmp(value, "yes") || !strcasecmp(value, "on")) {
+        return 1;
+    }
+    if (!strcmp(value, "0") || !strcasecmp(value, "false")
+            || !strcasecmp(value, "no") || !strcasecmp(value, "off")) {
+        return 0;
+    }
+    return fallback;
 }

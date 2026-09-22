@@ -6,5 +6,5 @@
 // sent in 20 ms frames (160 bytes). Returns 0 on success, -1 on I/O/socket
 // failure, and stops early when stop_requested becomes non-zero.
 int pb_linux_rtp_stream_alaw(const char *destination_host, int destination_port,
-                             const char *audio_path,
+                             const char *audio_path, int local_port,
                              volatile sig_atomic_t *stop_requested);

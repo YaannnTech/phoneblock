@@ -143,6 +143,7 @@ int main(int argc, char **argv)
             config.sip_host, config.sip_port, config.sip_user,
             config.sip_local_port, config.phoneblock_base_url,
             config.phoneblock_token, config.announcement_path,
+            config.rtp_port,
             &shutdown_requested);
         if (result != 0) return EXIT_FAILURE;
         pb_log_info("linux", "SIP listener stopped");

@@ -53,7 +53,7 @@ int main(void)
     pthread_t thread;
     assert(pthread_create(&thread, NULL, receiver_thread, NULL) == 0);
     assert(pb_linux_rtp_stream_alaw("127.0.0.1", ntohs(address.sin_port),
-                                    path, &stop_requested) == 0);
+                                    path, 0, &stop_requested) == 0);
     pthread_join(thread, NULL);
     assert(packet_count == 1);
     assert(valid_packet);

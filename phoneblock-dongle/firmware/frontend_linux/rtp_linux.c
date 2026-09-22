@@ -15,7 +15,7 @@
 #define RTP_FRAME_SIZE 160
 
 int pb_linux_rtp_stream_alaw(const char *destination_host, int destination_port,
-                             const char *audio_path,
+                             const char *audio_path, int local_port,
                              volatile sig_atomic_t *stop_requested)
 {
     if (!destination_host || !audio_path || !stop_requested
@@ -36,6 +36,19 @@ int pb_linux_rtp_stream_alaw(const char *destination_host, int destination_port,
         freeaddrinfo(resolved);
         fclose(audio);
         return -1;
+    }
+    if (local_port > 0) {
+        struct sockaddr_in local = {
+            .sin_family = AF_INET,
+            .sin_addr.s_addr = htonl(INADDR_ANY),
+            .sin_port = htons(local_port),
+        };
+        if (bind(socket_fd, (struct sockaddr *)&local, sizeof(local)) != 0) {
+            close(socket_fd);
+            freeaddrinfo(resolved);
+            fclose(audio);
+            return -1;
+        }
     }
 
     uint16_t sequence = (uint16_t)pb_random_u32();

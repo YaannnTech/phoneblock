@@ -15,6 +15,7 @@
 typedef struct {
     char host[64];
     int port;
+    int local_port;
     char path[256];
     volatile sig_atomic_t *stop_requested;
     sip_transport_t *transport;
@@ -45,7 +46,7 @@ static void *rtp_stream_thread(void *opaque)
 {
     rtp_stream_args_t *args = opaque;
     pb_linux_rtp_stream_alaw(args->host, args->port, args->path,
-                             args->stop_requested);
+                             args->local_port, args->stop_requested);
     char bye[2048];
     int bye_length = build_bye(args, bye, sizeof(bye));
     if (bye_length > 0 && (size_t)bye_length < sizeof(bye)) {
@@ -58,7 +59,7 @@ static void *rtp_stream_thread(void *opaque)
 int pb_linux_sip_listen(const char *host, int port, const char *user,
                         int local_port, const char *phoneblock_base_url,
                         const char *phoneblock_token,
-                        const char *announcement_path,
+                        const char *announcement_path, int rtp_port,
                         volatile sig_atomic_t *stop_requested)
 {
     if (!host || !user || !stop_requested) return -1;
@@ -126,6 +127,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         }
         int response_status = 200;
         const char *response_reason = "OK";
+        char sdp_answer[512] = "";
         int spam_call = 0;
         char remote_rtp_ip[64] = "";
         int remote_rtp_port = 0;
@@ -151,6 +153,16 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     parse_sdp_connection_ip(packet, length, remote_rtp_ip,
                                              sizeof(remote_rtp_ip));
                     remote_rtp_port = parse_sdp_audio_port(packet, length);
+                    snprintf(sdp_answer, sizeof(sdp_answer),
+                             "v=0\r\n"
+                             "o=- 0 0 IN IP4 %s\r\n"
+                             "s=PhoneBlock\r\n"
+                             "c=IN IP4 %s\r\n"
+                             "t=0 0\r\n"
+                             "m=audio %d RTP/AVP 8\r\n"
+                             "a=rtpmap:8 PCMA/8000\r\n",
+                             sip_transport_local_ip(transport),
+                             sip_transport_local_ip(transport), rtp_port);
                 }
                 pb_log_info("sip", "INVITE %s classified as %s",
                             number, phone_result == 0
@@ -161,7 +173,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             }
         }
         int response_length = sip_response_build(
-            packet, length, response_status, response_reason, "linux", NULL, user,
+            packet, length, response_status, response_reason, "linux",
+            sdp_answer[0] ? sdp_answer : NULL, user,
             sip_transport_local_ip(transport),
             sip_transport_local_port(transport), response, sizeof(response));
         if (response_length > 0) {
@@ -175,6 +188,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                 if (args) {
                     snprintf(args->host, sizeof(args->host), "%s", remote_rtp_ip);
                     args->port = remote_rtp_port;
+                    args->local_port = rtp_port;
                     snprintf(args->path, sizeof(args->path), "%s", announcement_path);
                     args->stop_requested = stop_requested;
                     args->transport = transport;

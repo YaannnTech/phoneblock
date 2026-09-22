@@ -25,6 +25,16 @@ int main(void)
     assert(strcmp(value, "abc=def") == 0);
     assert(pb_config_file_get(&config, "missing", value, sizeof(value)) == 0);
 
+    assert(pb_config_file_set(&config, "sip_port", "5060") == 0);
+    assert(pb_config_file_set(&config, "sip_host", "fritzbox.local") == 0);
+    assert(pb_config_file_save(path, &config) == 0);
+    pb_config_file_t reloaded;
+    assert(pb_config_file_load(path, &reloaded) == 0);
+    assert(pb_config_file_get(&reloaded, "sip_host", value, sizeof(value)) == 1);
+    assert(strcmp(value, "fritzbox.local") == 0);
+    assert(pb_config_file_get(&reloaded, "sip_port", value, sizeof(value)) == 1);
+    assert(strcmp(value, "5060") == 0);
+
     remove(path);
     puts("test_config_file: all tests passed");
     return 0;

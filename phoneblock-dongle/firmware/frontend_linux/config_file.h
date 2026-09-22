@@ -25,3 +25,12 @@ int pb_config_file_load(const char *path, pb_config_file_t *config);
 // key exists, 0 when it does not, and -1 when the output buffer is too small.
 int pb_config_file_get(const pb_config_file_t *config, const char *key,
                        char *out, size_t cap);
+
+// Set or replace a key in memory. Returns 0 on success and -1 when the key
+// or value exceeds the configured bounds, or when the table is full.
+int pb_config_file_set(pb_config_file_t *config, const char *key,
+                       const char *value);
+
+// Persist the current configuration atomically. The temporary file is created
+// beside `path`, then renamed over it so readers never observe a partial file.
+int pb_config_file_save(const char *path, const pb_config_file_t *config);

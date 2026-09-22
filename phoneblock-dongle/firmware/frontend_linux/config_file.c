@@ -1,7 +1,9 @@
 #include "config_file.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static char *trim(char *text)
 {
@@ -78,4 +80,63 @@ int pb_config_file_get(const pb_config_file_t *config, const char *key,
         return 1;
     }
     return 0;
+}
+
+int pb_config_file_set(pb_config_file_t *config, const char *key,
+                       const char *value)
+{
+    if (!config || !key || !value || !key[0]
+            || strlen(key) >= PB_CONFIG_KEY_CAP
+            || strlen(value) >= PB_CONFIG_VALUE_CAP) {
+        return -1;
+    }
+
+    size_t entry_index;
+    for (entry_index = 0; entry_index < config->count; entry_index++) {
+        if (strcmp(config->entries[entry_index].key, key) == 0) break;
+    }
+    if (entry_index == config->count) {
+        if (config->count == PB_CONFIG_MAX_ENTRIES) return -1;
+        config->count++;
+    }
+    strcpy(config->entries[entry_index].key, key);
+    strcpy(config->entries[entry_index].value, value);
+    return 0;
+}
+
+int pb_config_file_save(const char *path, const pb_config_file_t *config)
+{
+    if (!path || !config) return -1;
+
+    size_t path_length = strlen(path);
+    char *temporary_path = malloc(path_length + 12);
+    if (!temporary_path) return -1;
+    snprintf(temporary_path, path_length + 12, "%s.tmpXXXXXX", path);
+
+    int descriptor = mkstemp(temporary_path);
+    if (descriptor < 0) {
+        free(temporary_path);
+        return -1;
+    }
+    FILE *output = fdopen(descriptor, "w");
+    if (!output) {
+        close(descriptor);
+        unlink(temporary_path);
+        free(temporary_path);
+        return -1;
+    }
+
+    int result = 0;
+    for (size_t entry_index = 0; entry_index < config->count; entry_index++) {
+        if (fprintf(output, "%s=%s\n", config->entries[entry_index].key,
+                    config->entries[entry_index].value) < 0) {
+            result = -1;
+            break;
+        }
+    }
+    if (fclose(output) != 0) result = -1;
+    if (result == 0 && rename(temporary_path, path) != 0) result = -1;
+    if (result != 0) unlink(temporary_path);
+    free(temporary_path);
+    return result;
 }

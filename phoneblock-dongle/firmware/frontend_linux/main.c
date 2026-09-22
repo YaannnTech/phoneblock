@@ -1,6 +1,7 @@
 #include "config_linux.h"
 #include "phoneblock_api_linux.h"
 #include "platform.h"
+#include "sip_register_linux.h"
 #include "sip_transport.h"
 
 #include <getopt.h>
@@ -33,7 +34,7 @@ static const char *default_config_path(void)
 static void print_usage(const char *program)
 {
     fprintf(stderr, "Usage: %s [--config PATH] [--foreground] [--check-config] "
-                    "[--check-number NUMBER] [--probe-sip]\n",
+                    "[--check-number NUMBER] [--probe-sip] [--register-sip]\n",
             program);
 }
 
@@ -42,6 +43,7 @@ int main(int argc, char **argv)
     const char *config_path = default_config_path();
     const char *check_number = NULL;
     int probe_sip = 0;
+    int register_sip = 0;
     int check_config = 0;
 
     static const struct option options[] = {
@@ -50,16 +52,18 @@ int main(int argc, char **argv)
         { "check-config", no_argument, NULL, 't' },
         { "check-number", required_argument, NULL, 'n' },
         { "probe-sip", no_argument, NULL, 'p' },
+        { "register-sip", no_argument, NULL, 'r' },
         { NULL, 0, NULL, 0 }
     };
     int option;
-    while ((option = getopt_long(argc, argv, "c:ftn:p", options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:ftn:pr", options, NULL)) != -1) {
         switch (option) {
             case 'c': config_path = optarg; break;
             case 'f': break;
             case 't': check_config = 1; break;
             case 'n': check_number = optarg; break;
             case 'p': probe_sip = 1; break;
+            case 'r': register_sip = 1; break;
             default:
                 print_usage(argv[0]);
                 return EXIT_FAILURE;
@@ -103,6 +107,20 @@ int main(int argc, char **argv)
                     sip_transport_local_port(transport));
         sip_transport_close(transport);
         return EXIT_SUCCESS;
+    }
+    if (register_sip) {
+        int status;
+        char challenge[256];
+        int result = pb_linux_sip_register_probe(
+            config.sip_host, config.sip_port, config.sip_user,
+            config.sip_pass, config.sip_local_port, &status,
+            challenge, sizeof(challenge));
+        if (result != 0) {
+            pb_log_err("linux", "SIP REGISTER exchange failed");
+            return EXIT_FAILURE;
+        }
+        pb_log_info("linux", "SIP REGISTER completed with status %d", status);
+        return status == 200 ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (check_config) return EXIT_SUCCESS;

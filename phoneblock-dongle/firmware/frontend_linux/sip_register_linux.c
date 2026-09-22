@@ -33,10 +33,11 @@ static void md5_hex(const char *input, char output[33])
 
 static int build_register(const sip_transport_t *transport, const char *host,
                           const char *user, unsigned int cseq,
+                          uint32_t registration_id,
                           const char *authorization,
                           char *out, size_t capacity)
 {
-    uint32_t random_value = pb_random_u32();
+    uint32_t branch = pb_random_u32();
     return snprintf(out, capacity,
         "REGISTER sip:%s SIP/2.0\r\n"
         "Via: SIP/2.0/UDP %s:%d;branch=z9hG4bK%08x\r\n"
@@ -51,8 +52,8 @@ static int build_register(const sip_transport_t *transport, const char *host,
         "User-Agent: PhoneBlock-Dongle/Linux\r\n"
         "Content-Length: 0\r\n\r\n",
         host, sip_transport_local_ip(transport), sip_transport_local_port(transport),
-        random_value, user, host, random_value ^ 0x13579bdfu,
-        user, host, random_value, host, cseq,
+        branch, user, host, registration_id ^ 0x13579bdfu,
+        user, host, registration_id, host, cseq,
         user, host,
         sip_transport_local_port(transport),
         authorization ? authorization : "");
@@ -112,7 +113,9 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
     challenge[0] = '\0';
 
     char request[2048];
-    int request_length = build_register(transport, host, user, 1, NULL,
+    uint32_t registration_id = pb_random_u32();
+    int request_length = build_register(transport, host, user, 1,
+                                        registration_id, NULL,
                                         request, sizeof(request));
     if (request_length < 0 || (size_t)request_length >= sizeof(request)
             || sip_transport_send(transport, request, request_length) < 0) {
@@ -152,7 +155,8 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
         build_digest_authorization(host, user, password, auth_user, realm,
                        &parsed,
                                    authorization, sizeof(authorization));
-        request_length = build_register(transport, host, user, 2, authorization,
+        request_length = build_register(transport, host, user, 2,
+                        registration_id, authorization,
                                         request, sizeof(request));
         if (request_length < 0 || (size_t)request_length >= sizeof(request)
                 || sip_transport_send(transport, request, request_length) < 0) {

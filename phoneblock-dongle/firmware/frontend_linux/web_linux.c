@@ -132,18 +132,44 @@ int pb_linux_web_serve(int port, const char *bind_host,
                                  sizeof(config.sip_host));
                 copy_form_string(body, "sip_user", config.sip_user,
                                  sizeof(config.sip_user));
-                copy_form_string(body, "sip_pass", config.sip_pass,
-                                 sizeof(config.sip_pass));
+                char new_password[128] = "";
+                char new_token[256] = "";
+                copy_form_string(body, "sip_pass", new_password,
+                                 sizeof(new_password));
                 copy_form_string(body, "phoneblock_base_url", config.phoneblock_base_url,
                                  sizeof(config.phoneblock_base_url));
-                copy_form_string(body, "phoneblock_token", config.phoneblock_token,
-                                 sizeof(config.phoneblock_token));
+                copy_form_string(body, "phoneblock_token", new_token,
+                                 sizeof(new_token));
                 config.sip_port = form_int(body, "sip_port", config.sip_port);
                 config.sip_local_port = form_int(body, "sip_local_port", config.sip_local_port);
                 config.rtp_port = form_int(body, "rtp_port", config.rtp_port);
-                if (pb_linux_config_save(config_path, &config) != 0) {
+                if (new_password[0]) {
+                    strncpy(config.sip_pass, new_password, sizeof(config.sip_pass) - 1);
+                    config.sip_pass[sizeof(config.sip_pass) - 1] = '\0';
+                }
+                if (new_token[0]) {
+                    strncpy(config.phoneblock_token, new_token,
+                            sizeof(config.phoneblock_token) - 1);
+                    config.phoneblock_token[sizeof(config.phoneblock_token) - 1] = '\0';
+                }
+                const char *error = NULL;
+                if (!config.sip_host[0]) error = "SIP registrar host is required";
+                else if (!config.sip_user[0]) error = "SIP username is required";
+                else if (config.sip_port < 1 || config.sip_port > 65535)
+                    error = "SIP registrar port must be between 1 and 65535";
+                else if (config.sip_local_port < 1 || config.sip_local_port > 65535)
+                    error = "Local SIP port must be between 1 and 65535";
+                else if (config.rtp_port < 1 || config.rtp_port > 65535)
+                    error = "RTP port must be between 1 and 65535";
+                else if (strncmp(config.phoneblock_base_url, "http://", 7) != 0
+                         && strncmp(config.phoneblock_base_url, "https://", 8) != 0)
+                    error = "PhoneBlock API URL must start with http:// or https://";
+                if (error) {
+                    send_response(client, 400, "Bad Request", "text/plain; charset=utf-8",
+                                  error);
+                } else if (pb_linux_config_save(config_path, &config) != 0) {
                     send_response(client, 500, "Internal Server Error",
-                                  "text/plain; charset=utf-8", "config save failed\n");
+                                  "text/plain; charset=utf-8", "Could not save configuration");
                 } else {
                     send_response(client, 200, "OK", "application/json",
                                   "{\"saved\":true}\n");
@@ -263,7 +289,8 @@ static const char *dashboard_html(void)
         "'<br>Calls passed: '+s.callsPassed+'<br>Classification errors: '+s.classificationErrors; }"
         "q('#form').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/config',{method:'POST',"
         "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});"
-        "const m=q('#message');m.textContent=r.ok?'Saved. Restart the add-on to apply changes.':'Save failed';"
+        "const text=await r.text();const m=q('#message');m.textContent=r.ok?"
+        "'Saved. Restart the add-on to apply changes.':(text||'Save failed');"
         "m.className=r.ok?'ok':'error';};load().catch(()=>q('#status').textContent='Unable to load status');</script>"
         "</body></html>";
 }

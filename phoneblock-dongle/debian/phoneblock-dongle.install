@@ -1,0 +1,2 @@
+firmware/test/phoneblock_linux usr/bin/phoneblock-dongle
+debian/phoneblock-dongle.service lib/systemd/system

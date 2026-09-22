@@ -1,0 +1,21 @@
+[Unit]
+Description=PhoneBlock SIP spam-call blocker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=phoneblock
+Group=phoneblock
+ExecStart=/usr/bin/phoneblock-dongle --service --config /etc/phoneblock/dongle.conf
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/phoneblock
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

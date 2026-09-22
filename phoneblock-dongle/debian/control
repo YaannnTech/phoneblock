@@ -1,0 +1,13 @@
+Source: phoneblock-dongle
+Section: net
+Priority: optional
+Maintainer: PhoneBlock contributors
+Build-Depends: debhelper-compat (= 13), gcc, make, libcurl4-openssl-dev, libssl-dev
+Standards-Version: 4.6.2
+
+Package: phoneblock-dongle
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ca-certificates
+Description: PhoneBlock Linux SIP spam-call blocker
+ Native Linux service that registers as a SIP endpoint, checks callers
+ against PhoneBlock, and streams a G.711 A-law announcement for spam calls.

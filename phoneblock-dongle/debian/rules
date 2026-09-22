@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE) -C firmware/test phoneblock_linux IDF_PATH=/usr
+
+override_dh_auto_install:
+	dh_install
+	install -d debian/phoneblock-dongle/etc/phoneblock
+	install -d debian/phoneblock-dongle/var/lib/phoneblock
+
+override_dh_fixperms:
+	dh_fixperms
+	chmod 0755 debian/phoneblock-dongle/usr/bin/phoneblock-dongle

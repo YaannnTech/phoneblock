@@ -7,6 +7,7 @@
 #include "web_linux.h"
 
 #include <getopt.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,22 @@
 #include <unistd.h>
 
 static volatile sig_atomic_t shutdown_requested;
+
+typedef struct {
+    int port;
+    const char *sip_host;
+    int sip_port;
+    volatile sig_atomic_t *stop_requested;
+} web_thread_args_t;
+
+static void *web_thread(void *opaque)
+{
+    web_thread_args_t *args = opaque;
+    pb_linux_web_serve(args->port, "127.0.0.1", args->sip_host,
+                       args->sip_port, args->stop_requested);
+    free(args);
+    return NULL;
+}
 
 static void handle_signal(int signal_number)
 {
@@ -142,14 +159,28 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTERM, &action, NULL);
     pb_log_info("linux", "service skeleton running");
-    if (web_port > 0) {
+    if (web_port > 0 && !service_mode && !listen_sip) {
         return pb_linux_web_serve(web_port, "127.0.0.1",
                                   config.sip_host, config.sip_port,
                                   &shutdown_requested);
     }
+    if (web_port > 0 && (service_mode || listen_sip)) {
+        web_thread_args_t *args = calloc(1, sizeof(*args));
+        if (!args) return EXIT_FAILURE;
+        args->port = web_port;
+        args->sip_host = config.sip_host;
+        args->sip_port = config.sip_port;
+        args->stop_requested = &shutdown_requested;
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, web_thread, args) != 0) {
+            free(args);
+            return EXIT_FAILURE;
+        }
+        pthread_detach(thread);
+    }
     if (listen_sip) {
         int result = pb_linux_sip_listen(
-            config.sip_host, config.sip_port, config.sip_user,
+            config.sip_host, config.sip_port, config.sip_user, config.sip_pass,
             config.sip_local_port, config.phoneblock_base_url,
             config.phoneblock_token, config.announcement_path,
             config.rtp_port,
@@ -159,26 +190,12 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
     if (service_mode) {
-        while (!shutdown_requested) {
-            int status = 0;
-            char challenge[256];
-            int result = pb_linux_sip_register_probe(
-                config.sip_host, config.sip_port, config.sip_user,
-                config.sip_pass, config.sip_local_port, &status,
-                challenge, sizeof(challenge));
-            if (result == 0 && status == 200) {
-                pb_log_info("linux", "SIP service registered; refreshing in 1800 s");
-                for (int second = 0; second < 1800 && !shutdown_requested; second++) {
-                    pb_task_sleep_ms(1000);
-                }
-            } else {
-                pb_log_warn("linux", "SIP registration failed (status %d); retrying in 30 s",
-                            status);
-                for (int second = 0; second < 30 && !shutdown_requested; second++) {
-                    pb_task_sleep_ms(1000);
-                }
-            }
-        }
+        int result = pb_linux_sip_listen(
+            config.sip_host, config.sip_port, config.sip_user, config.sip_pass,
+            config.sip_local_port, config.phoneblock_base_url,
+            config.phoneblock_token, config.announcement_path, config.rtp_port,
+            &shutdown_requested);
+        if (result != 0) return EXIT_FAILURE;
     } else {
         while (!shutdown_requested) pause();
     }

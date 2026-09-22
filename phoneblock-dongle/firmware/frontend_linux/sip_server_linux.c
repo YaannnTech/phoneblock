@@ -8,7 +8,25 @@
 #include "rtp_linux.h"
 
 #include <stdio.h>
+#include <pthread.h>
+#include <stdlib.h>
 #include <string.h>
+
+typedef struct {
+    char host[64];
+    int port;
+    char path[256];
+    volatile sig_atomic_t *stop_requested;
+} rtp_stream_args_t;
+
+static void *rtp_stream_thread(void *opaque)
+{
+    rtp_stream_args_t *args = opaque;
+    pb_linux_rtp_stream_alaw(args->host, args->port, args->path,
+                             args->stop_requested);
+    free(args);
+    return NULL;
+}
 
 int pb_linux_sip_listen(const char *host, int port, const char *user,
                         int local_port, const char *phoneblock_base_url,
@@ -78,8 +96,19 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             sip_transport_send_to(transport, &peer, response, response_length);
             if (spam_call && remote_rtp_ip[0] && remote_rtp_port > 0
                     && announcement_path && announcement_path[0]) {
-                pb_linux_rtp_stream_alaw(remote_rtp_ip, remote_rtp_port,
-                                         announcement_path, stop_requested);
+                rtp_stream_args_t *args = calloc(1, sizeof(*args));
+                if (args) {
+                    snprintf(args->host, sizeof(args->host), "%s", remote_rtp_ip);
+                    args->port = remote_rtp_port;
+                    snprintf(args->path, sizeof(args->path), "%s", announcement_path);
+                    args->stop_requested = stop_requested;
+                    pthread_t thread;
+                    if (pthread_create(&thread, NULL, rtp_stream_thread, args) == 0) {
+                        pthread_detach(thread);
+                    } else {
+                        free(args);
+                    }
+                }
             }
         }
     }

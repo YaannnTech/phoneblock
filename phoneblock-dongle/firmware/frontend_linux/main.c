@@ -169,7 +169,8 @@ int main(int argc, char **argv)
             pb_log_err("tr064", "Fritz!Box SIP provisioning failed");
             return EXIT_FAILURE;
         }
-        snprintf(config.sip_host, sizeof(config.sip_host), "%s", config.fritzbox_host);
+        strncpy(config.sip_host, config.fritzbox_host, sizeof(config.sip_host) - 1);
+        config.sip_host[sizeof(config.sip_host) - 1] = '\0';
         config.sip_port = 5060;
         snprintf(config.sip_user, sizeof(config.sip_user), "%s", credentials.sip_user);
         snprintf(config.sip_pass, sizeof(config.sip_pass), "%s", credentials.sip_pass);

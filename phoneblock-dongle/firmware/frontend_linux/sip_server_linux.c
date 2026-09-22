@@ -28,6 +28,8 @@ typedef struct {
     volatile sig_atomic_t *cancelled;
 } rtp_stream_args_t;
 
+static volatile sig_atomic_t s_rtp_cancelled;
+
 static int build_bye(const rtp_stream_args_t *args, char *out, size_t capacity)
 {
     return snprintf(out, capacity,
@@ -75,7 +77,6 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     char response[4096];
     struct sockaddr_in peer;
     rtp_stream_args_t *pending_rtp = NULL;
-    volatile sig_atomic_t active_cancelled = 0;
     char active_call_id[256] = "";
     while (!*stop_requested) {
         int length = sip_transport_recv(transport, 500, packet,
@@ -94,11 +95,11 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             if (matching_ack) {
                 snprintf(active_call_id, sizeof(active_call_id), "%s",
                          pending_rtp->call_id);
+                s_rtp_cancelled = 0;
+                pending_rtp->cancelled = &s_rtp_cancelled;
                 pthread_t thread;
                 if (pthread_create(&thread, NULL, rtp_stream_thread, pending_rtp) == 0) {
                     pthread_detach(thread);
-                    active_cancelled = 0;
-                    pending_rtp->cancelled = &active_cancelled;
                     pending_rtp = NULL;
                 } else {
                     free(pending_rtp);
@@ -114,7 +115,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     && pb_linux_call_id_matches(pending_rtp->call_id, bye_call_id))
                 || (active_call_id[0]
                     && pb_linux_call_id_matches(active_call_id, bye_call_id));
-            if (matching_bye) active_cancelled = 1;
+            if (matching_bye) s_rtp_cancelled = 1;
             int bye_response_length = sip_response_build(
                 packet, length, matching_bye ? 200 : 481,
                 matching_bye ? "OK" : "Call/Transaction Does Not Exist",
@@ -218,7 +219,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             }
         }
     }
-    active_cancelled = 1;
+    s_rtp_cancelled = 1;
     free(pending_rtp);
     sip_transport_close(transport);
     return 0;

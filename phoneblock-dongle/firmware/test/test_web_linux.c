@@ -58,6 +58,9 @@ int main(void)
     request_path("/health", response, sizeof(response));
     assert(strstr(response, "200 OK") != NULL);
     assert(strstr(response, "ok\n") != NULL);
+    request_path("/", response, sizeof(response));
+    assert(strstr(response, "200 OK") != NULL);
+    assert(strstr(response, "PhoneBlock Dongle") != NULL);
     request_path("/api/status", response, sizeof(response));
     assert(strstr(response, "\"sipHost\":\"fritz.box\"") != NULL);
     request_path("/missing", response, sizeof(response));

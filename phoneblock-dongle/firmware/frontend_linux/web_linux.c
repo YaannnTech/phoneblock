@@ -61,6 +61,17 @@ int pb_linux_web_serve(int port, const char *bind_host,
         }
         if (strncmp(request, "GET /health ", 12) == 0) {
             send_response(client, 200, "OK", "text/plain; charset=utf-8", "ok\n");
+        } else if (strncmp(request, "GET / ", 6) == 0
+                   || strncmp(request, "GET /index.html ", 16) == 0) {
+            const char *body =
+                "<!doctype html><html><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                "<title>PhoneBlock Dongle</title></head><body>"
+                "<h1>PhoneBlock Dongle</h1>"
+                "<p>SIP service is running.</p>"
+                "<p><a href=\"/api/status\">View status</a></p>"
+                "</body></html>\n";
+            send_response(client, 200, "OK", "text/html; charset=utf-8", body);
         } else if (strncmp(request, "GET /api/status ", 16) == 0) {
             char body[512];
             snprintf(body, sizeof(body),

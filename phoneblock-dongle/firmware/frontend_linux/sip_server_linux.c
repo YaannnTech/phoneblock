@@ -210,15 +210,14 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                         snprintf(args->from_header, sizeof(args->from_header), "%s", value);
                     }
                     if (call_id) {
-                        header_value(call_id, packet + length, value, sizeof(value));
-                        snprintf(args->call_id, sizeof(args->call_id), "%s", value);
+                        header_value(call_id, packet + length, args->call_id,
+                                     sizeof(args->call_id));
                     }
                     pending_rtp = args;
                 }
             }
         }
     }
-    if (pending_rtp) pending_rtp->cancelled = 1;
     active_cancelled = 1;
     free(pending_rtp);
     sip_transport_close(transport);

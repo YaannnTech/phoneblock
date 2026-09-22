@@ -6,7 +6,7 @@ CFLAGS  ?= -Wall -Wextra -Werror -O0 -g -I../main -I../core
 CJSON_CFLAGS := $(shell pkg-config --cflags libcjson)
 CJSON_LIBS   := $(shell pkg-config --libs libcjson)
 
-BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file test_config_linux test_sip_transport_linux test_http_client_linux test_phoneblock_api_linux test_tr064_client_linux test_sip_register_linux test_rtp_linux test_sip_dialog_linux
+BINS = test_strbuf test_sip_parse test_sip_frame test_sip_srv test_sip_auth test_sip_response test_tr064_parse test_phone_norm test_api_scan test_log_capture test_improv_proto test_blocklist_lookup test_sched_time test_smtp_body test_mail_html test_mail_rcpt test_name_filter test_version_cmp test_net_local test_heap_guard test_platform_linux test_config_file test_config_linux test_sip_transport_linux test_http_client_linux test_phoneblock_api_linux test_tr064_client_linux test_sip_register_linux test_rtp_linux test_sip_dialog_linux test_web_linux
 
 test_sip_parse: test_sip_parse.c ../core/sip_parse.c ../core/sip_parse.h \
 				../core/dial_rules.c ../core/dial_rules.h \
@@ -122,6 +122,10 @@ test_sip_dialog_linux: test_sip_dialog_linux.c ../frontend_linux/sip_dialog_linu
 		       ../frontend_linux/sip_dialog_linux.h
 	$(CC) $(CFLAGS) -I../frontend_linux test_sip_dialog_linux.c \
 	../frontend_linux/sip_dialog_linux.c -o $@
+
+test_web_linux: test_web_linux.c ../frontend_linux/web_linux.c ../frontend_linux/web_linux.h
+	$(CC) $(CFLAGS) -pthread -I../frontend_linux test_web_linux.c \
+		../frontend_linux/web_linux.c -o $@
 
 phoneblock_linux: ../frontend_linux/main.c ../frontend_linux/config_linux.c \
 		  ../frontend_linux/config_linux.h ../frontend_linux/config_file.c \

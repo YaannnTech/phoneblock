@@ -17,13 +17,40 @@ typedef struct {
     int port;
     char path[256];
     volatile sig_atomic_t *stop_requested;
+    sip_transport_t *transport;
+    struct sockaddr_in peer;
+    char request_uri[256];
+    char from_header[512];
+    char to_header[512];
+    char call_id[256];
 } rtp_stream_args_t;
+
+static int build_bye(const rtp_stream_args_t *args, char *out, size_t capacity)
+{
+    return snprintf(out, capacity,
+        "BYE %s SIP/2.0\r\n"
+        "Via: SIP/2.0/UDP %s:%d;branch=z9hG4bK%08x\r\n"
+        "Max-Forwards: 70\r\n"
+        "From: %s\r\n"
+        "To: %s\r\n"
+        "Call-ID: %s\r\n"
+        "CSeq: 2 BYE\r\n"
+        "Content-Length: 0\r\n\r\n",
+        args->request_uri, sip_transport_local_ip(args->transport),
+        sip_transport_local_port(args->transport), pb_random_u32(),
+        args->to_header, args->from_header, args->call_id);
+}
 
 static void *rtp_stream_thread(void *opaque)
 {
     rtp_stream_args_t *args = opaque;
     pb_linux_rtp_stream_alaw(args->host, args->port, args->path,
                              args->stop_requested);
+    char bye[2048];
+    int bye_length = build_bye(args, bye, sizeof(bye));
+    if (bye_length > 0 && (size_t)bye_length < sizeof(bye)) {
+        sip_transport_send_to(args->transport, &args->peer, bye, bye_length);
+    }
     free(args);
     return NULL;
 }
@@ -49,6 +76,20 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         packet[length] = '\0';
         char method[16];
         parse_method(packet, length, method, sizeof(method));
+        if (strcmp(method, "ACK") == 0) {
+            pb_log_info("sip", "ACK received");
+            continue;
+        }
+        if (strcmp(method, "BYE") == 0) {
+            int bye_response_length = sip_response_build(
+                packet, length, 200, "OK", "linux", NULL, user,
+                sip_transport_local_ip(transport),
+                sip_transport_local_port(transport), response, sizeof(response));
+            if (bye_response_length > 0) {
+                sip_transport_send_to(transport, &peer, response, bye_response_length);
+            }
+            continue;
+        }
         if (strcmp(method, "OPTIONS") != 0 && strcmp(method, "INVITE") != 0) {
             continue;
         }
@@ -102,6 +143,26 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     args->port = remote_rtp_port;
                     snprintf(args->path, sizeof(args->path), "%s", announcement_path);
                     args->stop_requested = stop_requested;
+                    args->transport = transport;
+                    args->peer = peer;
+                    const char *to = find_header(packet, length, "To");
+                    const char *from = find_header(packet, length, "From");
+                    const char *call_id = find_header(packet, length, "Call-ID");
+                    char value[512];
+                    if (to) {
+                        header_value(to, packet + length, value, sizeof(value));
+                        snprintf(args->to_header, sizeof(args->to_header), "%s", value);
+                        parse_uri(value, (int)strlen(value), args->request_uri,
+                                  sizeof(args->request_uri));
+                    }
+                    if (from) {
+                        header_value(from, packet + length, value, sizeof(value));
+                        snprintf(args->from_header, sizeof(args->from_header), "%s", value);
+                    }
+                    if (call_id) {
+                        header_value(call_id, packet + length, value, sizeof(value));
+                        snprintf(args->call_id, sizeof(args->call_id), "%s", value);
+                    }
                     pthread_t thread;
                     if (pthread_create(&thread, NULL, rtp_stream_thread, args) == 0) {
                         pthread_detach(thread);

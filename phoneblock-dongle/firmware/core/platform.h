@@ -9,6 +9,7 @@ void pb_log_err(const char *tag, const char *fmt, ...);
 
 uint64_t pb_monotonic_us(void);
 uint32_t pb_random_u32(void);
+void pb_random_fill(void *out, size_t len);
 int pb_watchdog_is_subscribed(void);
 void pb_watchdog_subscribe(void);
 void pb_watchdog_reset(void);

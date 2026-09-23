@@ -34,10 +34,6 @@
 
 static const char *TAG = "sip";
 
-#define ESP_LOGI pb_log_info
-#define ESP_LOGW pb_log_warn
-#define ESP_LOGE pb_log_err
-
 // The local SIP port (bound + advertised) is configurable via
 // config_sip_local_port(); its default (15060) and rationale live in
 // config.c. RTP likewise via config_rtp_port() (default 16000).
@@ -582,7 +578,7 @@ static int sip_send_recv(sip_ctx_t *c, const char *tx, int tx_len,
             // FB binding still covers us). The caller decides whether to
             // surface it — keeping this off WARN/ERROR avoids flooding the
             // web "Protokoll" ring (log_capture.c) on every blip (#402).
-            ESP_LOGI(TAG, "no response from registrar within %d ms",
+            pb_log_info(TAG, "no response from registrar within %d ms",
                      SIP_REGISTER_RECV_TIMEOUT_MS);
             return -1;
         }
@@ -603,7 +599,7 @@ static int sip_send_recv(sip_ctx_t *c, const char *tx, int tx_len,
             && strcmp(rcv, s_public_ip) != 0) {
         strncpy(s_public_ip, rcv, sizeof(s_public_ip) - 1);
         s_public_ip[sizeof(s_public_ip) - 1] = '\0';
-        ESP_LOGI(TAG, "public IP (via received=): %s", s_public_ip);
+        pb_log_info(TAG, "public IP (via received=): %s", s_public_ip);
     }
     return r;
 }
@@ -649,7 +645,7 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
     char *tx = malloc(SIP_TX_BUF_SIZE);
     char *rx = malloc(SIP_RX_BUF_SIZE);
     if (!tx || !rx) {
-        ESP_LOGE(TAG, "malloc failed for SIP buffers");
+        pb_log_err(TAG, "malloc failed for SIP buffers");
         if (err) snprintf(err, err_cap,
             "REGISTER aborted: out of memory for SIP buffers");
         free(tx); free(rx);
@@ -660,12 +656,12 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
     c->cseq++;
     int tx_len = build_register(c, tx, SIP_TX_BUF_SIZE, false);
     if (tx_len < 0) {
-        ESP_LOGE(TAG, "REGISTER exceeds %d-byte buffer", SIP_TX_BUF_SIZE);
+        pb_log_err(TAG, "REGISTER exceeds %d-byte buffer", SIP_TX_BUF_SIZE);
         if (err) snprintf(err, err_cap, "REGISTER aborted: request too large");
         result = REGISTER_DEFINITIVE;
         goto cleanup;
     }
-    ESP_LOGI(TAG, "→ REGISTER (%d bytes):\n%.*s", tx_len, tx_len, tx);
+    pb_log_info(TAG, "→ REGISTER (%d bytes):\n%.*s", tx_len, tx_len, tx);
     int rx_len = sip_send_recv(c, tx, tx_len, rx, SIP_RX_BUF_SIZE);
     if (rx_len < 0) {
         // Don't log here: do_register's contract is to NOT surface the
@@ -678,10 +674,10 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
         result = REGISTER_TRANSIENT;
         goto cleanup;
     }
-    ESP_LOGI(TAG, "← %d bytes:\n%.*s", rx_len, rx_len, rx);
+    pb_log_info(TAG, "← %d bytes:\n%.*s", rx_len, rx_len, rx);
 
     int status = parse_status_code(rx, rx_len);
-    ESP_LOGI(TAG, "← %d (%d bytes)", status, rx_len);
+    pb_log_info(TAG, "← %d (%d bytes)", status, rx_len);
 
     if (status == 200) {
         int granted = parse_register_expires(rx, rx_len, config_device_id());
@@ -692,7 +688,7 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
     if (status != 401 && status != 407) {
         if (err) snprintf(err, err_cap,
             "REGISTER rejected: %d (check user / extension / Fritz!Box log)", status);
-        ESP_LOGE(TAG, "REGISTER rejected: %d", status);
+        pb_log_err(TAG, "REGISTER rejected: %d", status);
         result = REGISTER_DEFINITIVE;
         goto cleanup;
     }
@@ -703,7 +699,7 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
     if (!hdr) {
         if (err) snprintf(err, err_cap,
             "REGISTER %d without WWW-Authenticate header — bad registrar", status);
-        ESP_LOGE(TAG, "REGISTER %d without WWW-Authenticate header", status);
+        pb_log_err(TAG, "REGISTER %d without WWW-Authenticate header", status);
         result = REGISTER_DEFINITIVE;
         goto cleanup;
     }
@@ -711,13 +707,13 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
     header_value(hdr, rx + rx_len, val, sizeof(val));
     sip_auth_parse_challenge(val, &c->challenge);
     if (!c->challenge.valid) {
-        ESP_LOGE(TAG, "auth challenge missing realm/nonce");
+        pb_log_err(TAG, "auth challenge missing realm/nonce");
         if (err) snprintf(err, err_cap,
             "REGISTER: auth challenge missing realm/nonce");
         result = REGISTER_DEFINITIVE;
         goto cleanup;
     }
-    ESP_LOGI(TAG, "challenge: realm=\"%s\" qop=\"%s\"",
+    pb_log_info(TAG, "challenge: realm=\"%s\" qop=\"%s\"",
              c->challenge.realm, c->challenge.qop);
 
     // Resend with Authorization header. A server may answer the first
@@ -734,14 +730,14 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
         c->cseq++;
         tx_len = build_register(c, tx, SIP_TX_BUF_SIZE, true);
         if (tx_len < 0) {
-            ESP_LOGE(TAG, "REGISTER (with auth) exceeds %d-byte buffer",
+            pb_log_err(TAG, "REGISTER (with auth) exceeds %d-byte buffer",
                      SIP_TX_BUF_SIZE);
             if (err) snprintf(err, err_cap,
                 "REGISTER aborted: authenticated request too large");
             result = REGISTER_DEFINITIVE;
             goto cleanup;
         }
-        ESP_LOGI(TAG, "→ REGISTER with auth (%d bytes):\n%.*s",
+        pb_log_info(TAG, "→ REGISTER with auth (%d bytes):\n%.*s",
                  tx_len, tx_len, tx);
         rx_len = sip_send_recv(c, tx, tx_len, rx, SIP_RX_BUF_SIZE);
         if (rx_len < 0) {
@@ -750,11 +746,11 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
             result = REGISTER_TRANSIENT;
             goto cleanup;
         }
-        ESP_LOGI(TAG, "← %d bytes:\n%.*s", rx_len, rx_len, rx);
+        pb_log_info(TAG, "← %d bytes:\n%.*s", rx_len, rx_len, rx);
 
         status = parse_status_code(rx, rx_len);
         if (status == 200) {
-            ESP_LOGI(TAG, "← %d (authenticated)", status);
+            pb_log_info(TAG, "← %d (authenticated)", status);
             break;
         }
 
@@ -771,7 +767,7 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
                 sip_auth_parse_challenge(v, &fresh);
                 if (fresh.valid && fresh.stale) {
                     c->challenge = fresh;
-                    ESP_LOGI(TAG, "← %d stale nonce → re-auth with fresh nonce",
+                    pb_log_info(TAG, "← %d stale nonce → re-auth with fresh nonce",
                              status);
                     continue;
                 }
@@ -779,7 +775,7 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
         }
 
         // Surface the registrar's actual cause, not just the bare code.
-        // The full response is only ESP_LOGI (serial-only); the operator
+        // The full response is only logged at INFO level (serial-only); the operator
         // sees the web UI "Protokoll" panel, which mirrors WARN/ERROR. So
         // lift the status-line reason phrase plus any Warning/Retry-After
         // header into the ERROR line — that is what turns "403" into a
@@ -801,7 +797,7 @@ static register_outcome_t do_register(sip_ctx_t *c, int *granted_expires,
             snprintf(diag + m, sizeof(diag) - m, "; Warning: %s", warn);
 
         if (err) snprintf(err, err_cap, "%s", diag);
-        ESP_LOGE(TAG, "%s", diag);
+        pb_log_err(TAG, "%s", diag);
         result = REGISTER_DEFINITIVE;
         goto cleanup;
     }
@@ -844,7 +840,7 @@ static void send_response(sip_ctx_t *c, const struct sockaddr_in *peer,
 
     char *tx = malloc(SIP_TX_BUF_SIZE);
     if (!tx) {
-        ESP_LOGE(TAG, "malloc failed for response buffer");
+        pb_log_err(TAG, "malloc failed for response buffer");
         return;
     }
     int tx_len = sip_response_build(req, req_len, status, reason,
@@ -856,12 +852,12 @@ static void send_response(sip_ctx_t *c, const struct sockaddr_in *peer,
         // The request's headers were too large to echo into a complete
         // response. Send nothing rather than a partial, invalid message —
         // only reachable from a malformed/oversized request.
-        ESP_LOGW(TAG, "dropping %d %s: response exceeds %d-byte buffer",
+        pb_log_warn(TAG, "dropping %d %s: response exceeds %d-byte buffer",
                  status, reason, SIP_TX_BUF_SIZE);
         free(tx);
         return;
     }
-    ESP_LOGI(TAG, "→ %d %s (%d bytes):\n%.*s", status, reason, tx_len, tx_len, tx);
+    pb_log_info(TAG, "→ %d %s (%d bytes):\n%.*s", status, reason, tx_len, tx_len, tx);
     sip_transport_send_to(c->transport, peer, tx, tx_len);
     free(tx);
 }
@@ -934,7 +930,7 @@ static void prepare_media_endpoint(sip_ctx_t *c, dialog_t *d)
     // local endpoint is exactly right — no NAT to traverse. Advertise it
     // quietly; a WARN here would only alarm those users on the field panel.
     if (!config_stun_server()[0]) {
-        ESP_LOGI(TAG, "no STUN configured — advertising local RTP endpoint "
+        pb_log_info(TAG, "no STUN configured — advertising local RTP endpoint "
                       "%s:%d", d->media_ip, d->media_port);
         return;
     }
@@ -944,7 +940,7 @@ static void prepare_media_endpoint(sip_ctx_t *c, dialog_t *d)
     // stay on the local port. The boot-time probe already warned that only a
     // port-identical RTP forward (or a VoIP router) fixes audio here.
     if (rtp_nat_mapping() == NAT_MAP_ENDPOINT_DEPENDENT) {
-        ESP_LOGW(TAG, "symmetric NAT — advertising local RTP endpoint %s:%d "
+        pb_log_warn(TAG, "symmetric NAT — advertising local RTP endpoint %s:%d "
                       "(audio needs a port-identical RTP port-forward)",
                  d->media_ip, d->media_port);
         return;
@@ -953,12 +949,12 @@ static void prepare_media_endpoint(sip_ctx_t *c, dialog_t *d)
     char ip[INET_ADDRSTRLEN];
     int  port = 0;
     if (rtp_stun_map(config_stun_server(), ip, sizeof(ip), &port) && port > 0) {
-        ESP_LOGI(TAG, "media endpoint via STUN: %s:%d (local was %s:%d)",
+        pb_log_info(TAG, "media endpoint via STUN: %s:%d (local was %s:%d)",
                  ip, port, d->media_ip, d->media_port);
         snprintf(d->media_ip, sizeof(d->media_ip), "%s", ip);
         d->media_port = port;
     } else {
-        ESP_LOGW(TAG, "STUN gave no mapping — advertising local RTP endpoint "
+        pb_log_warn(TAG, "STUN gave no mapping — advertising local RTP endpoint "
                       "%s:%d (only correct if the router preserves the port)",
                  d->media_ip, d->media_port);
     }
@@ -1022,7 +1018,7 @@ static void capture_dialog(sip_ctx_t *c, const char *req, int req_len,
         if ((size_t)(eol - rr) < sizeof(d->route)) {
             header_value(rr, eol, d->route, sizeof(d->route));
         } else {
-            ESP_LOGW(TAG, "Record-Route too long (%d) — BYE sent without Route",
+            pb_log_warn(TAG, "Record-Route too long (%d) — BYE sent without Route",
                      (int)(eol - rr));
         }
     }
@@ -1043,11 +1039,11 @@ static void capture_dialog(sip_ctx_t *c, const char *req, int req_len,
             d->rtp_dest.sin_addr        = addr;
             d->rtp_dest.sin_port        = htons(rtp_port);
             d->rtp_dest_valid           = true;
-            ESP_LOGI(TAG, "remote RTP endpoint parsed: %s:%d", rtp_ip, rtp_port);
+            pb_log_info(TAG, "remote RTP endpoint parsed: %s:%d", rtp_ip, rtp_port);
         }
     }
     if (!d->rtp_dest_valid) {
-        ESP_LOGW(TAG, "could not parse remote RTP endpoint — no tone will play");
+        pb_log_warn(TAG, "could not parse remote RTP endpoint — no tone will play");
     }
 
     // SRTP negotiation. Telekom (and other IMS networks) offer RTP/SAVP
@@ -1065,12 +1061,12 @@ static void capture_dialog(sip_ctx_t *c, const char *req, int req_len,
                                       remote_key_b64, sizeof(remote_key_b64));
     if (crypto_tag > 0) {
         // Generate a fresh 30-byte SDES master key + salt.
-        esp_fill_random(d->srtp_tx_key, sizeof(d->srtp_tx_key));
+        pb_random_fill(d->srtp_tx_key, sizeof(d->srtp_tx_key));
         d->srtp_tx  = true;
         d->srtp_tag = crypto_tag;
-        ESP_LOGI(TAG, "SRTP offered (crypto tag %d) → answering RTP/SAVP", crypto_tag);
+        pb_log_info(TAG, "SRTP offered (crypto tag %d) → answering RTP/SAVP", crypto_tag);
     } else if (parse_sdp_audio_savp(req, req_len)) {
-        ESP_LOGW(TAG, "remote offers RTP/SAVP but no supported crypto suite "
+        pb_log_warn(TAG, "remote offers RTP/SAVP but no supported crypto suite "
                       "— answering plain RTP (media will likely be rejected)");
     }
 }
@@ -1138,11 +1134,11 @@ static void send_bye(sip_ctx_t *c)
 
     char *tx = malloc(SIP_TX_BUF_SIZE);
     if (!tx) {
-        ESP_LOGE(TAG, "malloc for BYE failed");
+        pb_log_err(TAG, "malloc for BYE failed");
         return;
     }
     int tx_len = build_bye(c, tx, SIP_TX_BUF_SIZE);
-    ESP_LOGI(TAG, "→ BYE (%d bytes):\n%.*s", tx_len, tx_len, tx);
+    pb_log_info(TAG, "→ BYE (%d bytes):\n%.*s", tx_len, tx_len, tx);
 
     sip_transport_send_to(c->transport, &d->peer, tx, tx_len);
     free(tx);
@@ -1179,7 +1175,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
 {
     const char *hdr = find_header(req, req_len, "From");
     if (!hdr) {
-        ESP_LOGW(TAG, "INVITE without From header");
+        pb_log_warn(TAG, "INVITE without From header");
         stats_record_call("", "", VERDICT_ERROR);
         return VERDICT_ERROR;
     }
@@ -1193,7 +1189,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
 
     char raw_user[64];
     if (user_from_uri(uri, raw_user, sizeof(raw_user)) == 0) {
-        ESP_LOGW(TAG, "could not extract user from From URI '%s'", uri);
+        pb_log_warn(TAG, "could not extract user from From URI '%s'", uri);
         stats_record_call(uri, "", VERDICT_ERROR);
         return VERDICT_ERROR;
     }
@@ -1212,7 +1208,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
     // Toggleable in the web UI under Spam-Ansage; default comes from
     // CONFIG_SIP_TEST_FORCE_SPAM_STAR_NUMBERS until the user changes it.
     if (config_accept_test_calls() && raw_user[0] == '*') {
-        ESP_LOGW(TAG, "TEST MODE: caller '%s' forced to SPAM", raw_user);
+        pb_log_warn(TAG, "TEST MODE: caller '%s' forced to SPAM", raw_user);
         stats_record_call(raw_user, display, VERDICT_SPAM);
         return VERDICT_SPAM;
     }
@@ -1226,7 +1222,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
     if (name_filter_parse(config_spam_names(), &names) > 0) {
         const char *hit = name_filter_match(&names, display);
         if (hit) {
-            ESP_LOGI(TAG, "caller name '%s' matches spam pattern '%s' → SPAM",
+            pb_log_info(TAG, "caller name '%s' matches spam pattern '%s' → SPAM",
                      display, hit);
             stats_record_call_assessed(raw_user, display, VERDICT_SPAM,
                                        PB_ASSESS_NAME_PATTERN);
@@ -1235,7 +1231,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
     }
 
     if (is_known_contact(display)) {
-        ESP_LOGI(TAG, "caller '%s' resolved via phone book → skip API",
+        pb_log_info(TAG, "caller '%s' resolved via phone book → skip API",
                  display);
         if (config_log_known_calls()) {
             stats_record_call(raw_user, display, VERDICT_LEGITIMATE);
@@ -1247,10 +1243,10 @@ static verdict_t check_invite_caller(const char *req, int req_len)
 
     char number[64];
     normalize_e164(raw_user, number, sizeof(number), config_dial_prefix());
-    ESP_LOGI(TAG, "caller URI=%s raw=%s normalized=%s", uri, raw_user, number);
+    pb_log_info(TAG, "caller URI=%s raw=%s normalized=%s", uri, raw_user, number);
 
     if (!looks_dialable(number)) {
-        ESP_LOGI(TAG, "non-external caller '%s' → skip API", number);
+        pb_log_info(TAG, "non-external caller '%s' → skip API", number);
         if (config_log_known_calls()) {
             stats_record_call(number, display, VERDICT_LEGITIMATE);
         } else {
@@ -1286,7 +1282,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
         // "SPAM (0 Stimmen)" the local cache used to log.
         result.assessment = personal ? PB_ASSESS_BLACKLIST : PB_ASSESS_SPAM_LIST;
         v = VERDICT_SPAM;
-        ESP_LOGI(TAG, "local blocklist → SPAM (%s, %s) for %s",
+        pb_log_info(TAG, "local blocklist → SPAM (%s, %s) for %s",
                  personal ? "personal" : "community",
                  wildcard ? "wildcard" : "exact", number);
     } else if (local == BLOCKLIST_LEGIT) {
@@ -1296,7 +1292,7 @@ static verdict_t check_invite_caller(const char *req, int req_len)
         // which phoneblock_check() leaves as PB_ASSESS_UNKNOWN.
         result.assessment = PB_ASSESS_LEGITIMATE;
         v = VERDICT_LEGITIMATE;
-        ESP_LOGI(TAG, "local blocklist → LEGIT (%s) for %s",
+        pb_log_info(TAG, "local blocklist → LEGIT (%s) for %s",
                  personal ? "personal" : "community", number);
     } else {
         v = phoneblock_check(number, &result, NULL);
@@ -1352,7 +1348,7 @@ static void resend_last_response(sip_ctx_t *c, const char *req, int req_len,
                           d->our_tag, NULL);
             break;
         default:
-            ESP_LOGW(TAG, "INVITE retransmit in state %d, ignoring", d->state);
+            pb_log_warn(TAG, "INVITE retransmit in state %d, ignoring", d->state);
             break;
     }
 }
@@ -1366,7 +1362,7 @@ static void handle_invite(sip_ctx_t *c, const char *req, int req_len,
 
     // Re-transmission of the INVITE we're already processing?
     if (d->state != DIALOG_IDLE && same_call_id(d->call_id, incoming_cid)) {
-        ESP_LOGI(TAG, "INVITE retransmit for active Call-ID, resending");
+        pb_log_info(TAG, "INVITE retransmit for active Call-ID, resending");
         resend_last_response(c, req, req_len, from);
         return;
     }
@@ -1397,14 +1393,14 @@ static void handle_invite(sip_ctx_t *c, const char *req, int req_len,
         } else if (d->state == DIALOG_ANSWERED) {
             send_bye(c);
         }
-        ESP_LOGI(TAG, "second INVITE during state %d → preempt, screen new caller",
+        pb_log_info(TAG, "second INVITE during state %d → preempt, screen new caller",
                  d->state);
         memset(d, 0, sizeof(*d));
     }
 
     capture_dialog(c, req, req_len, from);
     d->state = DIALOG_TRYING;
-    ESP_LOGI(TAG, "INVITE accepted, Call-ID=%s, checking caller…", d->call_id);
+    pb_log_info(TAG, "INVITE accepted, Call-ID=%s, checking caller…", d->call_id);
 
     // Stop Fritz!Box retransmits immediately, and signal "ringing" so the
     // Fritz!Box starts ringing the other phones (incl. waking the Fritz!Fon
@@ -1432,7 +1428,7 @@ static void handle_invite(sip_ctx_t *c, const char *req, int req_len,
         // real post-tone BYE deadline; if no ACK ever arrives the main loop
         // BYEs and frees the slot instead of wedging it forever.
         d->bye_at_us = (int64_t)pb_monotonic_us() + SIP_ACK_TIMEOUT_US;
-        ESP_LOGI(TAG, "SPAM → 200 OK sent, waiting for ACK to hang up");
+        pb_log_info(TAG, "SPAM → 200 OK sent, waiting for ACK to hang up");
     } else {
         // VERDICT_LEGITIMATE or VERDICT_ERROR → don't take the call, but don't
         // decline immediately either. Experiment #380 showed the Fritz!Box only
@@ -1443,7 +1439,7 @@ static void handle_invite(sip_ctx_t *c, const char *req, int req_len,
         // a 180 held for ~3 s before the 480 lets the app ring. So we keep the
         // 180 (sent above) and let the main loop send the 480 only after
         // SIP_DECLINE_DELAY_US has elapsed.
-        ESP_LOGI(TAG, "%s → 180 Ringing, declining in %lld ms",
+        pb_log_info(TAG, "%s → 180 Ringing, declining in %lld ms",
                  d->verdict == VERDICT_LEGITIMATE ? "LEGITIMATE" : "ERROR",
                  (long long)(SIP_DECLINE_DELAY_US / 1000));
     }
@@ -1456,7 +1452,7 @@ static void handle_ack(sip_ctx_t *c, const char *req, int req_len,
     char cid[128];
     parse_call_id(req, req_len, cid, sizeof(cid));
     if (!same_call_id(d->call_id, cid)) {
-        ESP_LOGW(TAG, "ACK for unknown Call-ID %s, ignoring", cid);
+        pb_log_warn(TAG, "ACK for unknown Call-ID %s, ignoring", cid);
         return;
     }
 
@@ -1469,7 +1465,7 @@ static void handle_ack(sip_ctx_t *c, const char *req, int req_len,
             // PCMA at 8 kHz → 8000 bytes == 1 s, so duration_us = bytes * 125.
             // Add a short tail margin so the last frame is delivered before BYE.
             int64_t duration_us = (int64_t)src.len * 125LL;
-            ESP_LOGI(TAG, "ACK received → streaming announcement (%u bytes ≈ %lld ms), then BYE",
+            pb_log_info(TAG, "ACK received → streaming announcement (%u bytes ≈ %lld ms), then BYE",
                      (unsigned)src.len, (long long)(duration_us / 1000));
             rtp_srtp_tx_t srtp = { .enabled = d->srtp_tx };
             if (d->srtp_tx) {
@@ -1480,19 +1476,19 @@ static void handle_ack(sip_ctx_t *c, const char *req, int req_len,
             d->state = DIALOG_STREAMING;
         } else {
             announcement_close(&src);   // nothing to stream — release the handle
-            ESP_LOGI(TAG, "ACK received → no audio (no rtp_dest or empty) → BYE");
+            pb_log_info(TAG, "ACK received → no audio (no rtp_dest or empty) → BYE");
             send_bye(c);
         }
 #else
-        ESP_LOGI(TAG, "ACK received → announcement disabled → BYE");
+        pb_log_info(TAG, "ACK received → announcement disabled → BYE");
         send_bye(c);
 #endif
     } else if (d->state == DIALOG_REJECTED) {
         // Non-spam: we declined with 480, ACK confirms, dialog done.
-        ESP_LOGI(TAG, "ACK received after 480 → dialog closed");
+        pb_log_info(TAG, "ACK received after 480 → dialog closed");
         memset(d, 0, sizeof(*d));
     } else {
-        ESP_LOGW(TAG, "ACK in unexpected state %d", d->state);
+        pb_log_warn(TAG, "ACK in unexpected state %d", d->state);
     }
 }
 
@@ -1508,7 +1504,7 @@ static void handle_bye(sip_ctx_t *c, const char *req, int req_len,
     send_response(c, from, req, req_len, 200, "OK", d->our_tag, NULL);
 
     if (same_call_id(d->call_id, cid)) {
-        ESP_LOGI(TAG, "BYE from remote → dialog closed");
+        pb_log_info(TAG, "BYE from remote → dialog closed");
         // If we were still streaming the announcement, stop it now —
         // the remote is gone, every further RTP packet is wasted.
         rtp_request_abort();
@@ -1531,7 +1527,7 @@ static void handle_cancel(sip_ctx_t *c, const char *req, int req_len,
     // fully resolved.
     if ((d->state == DIALOG_TRYING || d->state == DIALOG_PROCEEDING)
         && same_call_id(d->call_id, cid)) {
-        ESP_LOGI(TAG, "CANCEL → 487 Request Terminated on original INVITE");
+        pb_log_info(TAG, "CANCEL → 487 Request Terminated on original INVITE");
         // Synthesize a 487 response. We cannot easily reconstruct the
         // original INVITE's headers here, but the CANCEL's Via/From/To/
         // Call-ID/CSeq number match by spec — only the CSeq method differs
@@ -1564,18 +1560,18 @@ static void handle_incoming(sip_ctx_t *c, const char *pkt, int len,
     // but don't reply, that would loop.
     if (!is_response && method_len == 0) {
         if (len >= 4) {
-            ESP_LOGI(TAG, "← SIP keepalive ping (%d bytes) from %s:%d",
+            pb_log_info(TAG, "← SIP keepalive ping (%d bytes) from %s:%d",
                      len, from_ip, ntohs(from->sin_port));
             sip_transport_send(c->transport, "\r\n", 2);
-            ESP_LOGI(TAG, "→ SIP keepalive pong (2 bytes)");
+            pb_log_info(TAG, "→ SIP keepalive pong (2 bytes)");
         } else {
-            ESP_LOGI(TAG, "← SIP keepalive pong (%d bytes) from %s:%d",
+            pb_log_info(TAG, "← SIP keepalive pong (%d bytes) from %s:%d",
                      len, from_ip, ntohs(from->sin_port));
         }
         return;
     }
 
-    ESP_LOGI(TAG, "← from %s:%d  %d bytes:\n%.*s",
+    pb_log_info(TAG, "← from %s:%d  %d bytes:\n%.*s",
              from_ip, ntohs(from->sin_port),
              len, len, pkt);
 
@@ -1583,10 +1579,10 @@ static void handle_incoming(sip_ctx_t *c, const char *pkt, int len,
     if (is_response) {
         int status = parse_status_code(pkt, len);
         if (c->dialog.state == DIALOG_BYE_SENT) {
-            ESP_LOGI(TAG, "← %d on BYE → dialog closed", status);
+            pb_log_info(TAG, "← %d on BYE → dialog closed", status);
             memset(&c->dialog, 0, sizeof(c->dialog));
         } else {
-            ESP_LOGW(TAG, "ignoring stray response %d", status);
+            pb_log_warn(TAG, "ignoring stray response %d", status);
         }
         return;
     }
@@ -1602,7 +1598,7 @@ static void handle_incoming(sip_ctx_t *c, const char *pkt, int len,
     } else if (strcmp(method, "CANCEL") == 0) {
         handle_cancel(c, pkt, len, from);
     } else {
-        ESP_LOGW(TAG, "method \"%s\" not implemented yet", method);
+        pb_log_warn(TAG, "method \"%s\" not implemented yet", method);
     }
 }
 
@@ -1659,9 +1655,9 @@ static void reopen_transport(sip_ctx_t *c)
     if (nt) {
         sip_transport_close(c->transport);
         c->transport = nt;
-        ESP_LOGW(TAG, "reopened SIP connection after definitive rejection");
+        pb_log_warn(TAG, "reopened SIP connection after definitive rejection");
     } else {
-        ESP_LOGW(TAG, "reopen after definitive rejection failed — "
+        pb_log_warn(TAG, "reopen after definitive rejection failed — "
                       "keeping existing connection");
     }
 }
@@ -1726,7 +1722,7 @@ static void sip_task(void *arg)
                      "transport open failed (%s %.40s:%d) — retrying, "
                      "check host/port if persistent",
                      config_sip_transport(), dial_host, dial_port);
-            ESP_LOGE(TAG, "%s", msg);
+            pb_log_err(TAG, "%s", msg);
         }
         s_registered = false;
         stats_record_sip_state(false);
@@ -1734,7 +1730,7 @@ static void sip_task(void *arg)
     }
     if (strcmp(dial_host, config_sip_host()) != 0) {
         const char *via = (outbound && outbound[0]) ? "outbound proxy" : "SRV";
-        ESP_LOGI(TAG, "%s %s:%d active (SIP host: %s)",
+        pb_log_info(TAG, "%s %s:%d active (SIP host: %s)",
                  via, dial_host, dial_port, config_sip_host());
     }
 
@@ -1750,7 +1746,7 @@ static void sip_task(void *arg)
         snprintf(msg, sizeof(msg),
                  "transport %.8s ignored — firmware implements UDP/TCP/TLS only",
                  tr);
-        ESP_LOGW(TAG, "%s", msg);
+        pb_log_warn(TAG, "%s", msg);
     }
     // SRTP is negotiated per call from the INVITE's a=crypto offer (see
     // capture_dialog): the dongle answers RTP/SAVP and encrypts the
@@ -1781,7 +1777,7 @@ static void sip_task(void *arg)
     s_registered = ok;
     stats_record_sip_state(ok);
     if (ok) {
-        ESP_LOGI(TAG, "REGISTERED as %s@%s (granted %d s, requested %d s)",
+        pb_log_info(TAG, "REGISTERED as %s@%s (granted %d s, requested %d s)",
                  config_sip_user(), config_sip_host(),
                  granted_expires, config_sip_expires());
         s_binding_expires_at_us = (int64_t)pb_monotonic_us()
@@ -1789,7 +1785,7 @@ static void sip_task(void *arg)
         s_pending_error[0] = '\0';
         refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)(granted_expires / 2) * 1000000LL;
     } else {
-        ESP_LOGE(TAG, "initial registration failed (%s), retry in %d s",
+        pb_log_err(TAG, "initial registration failed (%s), retry in %d s",
                  err[0] ? err : "no detail", retry_delay_s);
         s_binding_expires_at_us = 0;
         s_pending_error[0] = '\0';
@@ -1801,7 +1797,7 @@ static void sip_task(void *arg)
 
     rx = malloc(SIP_RX_BUF_SIZE);
     if (!rx) {
-        ESP_LOGE(TAG, "malloc rx buffer failed — aborting SIP task");
+        pb_log_err(TAG, "malloc rx buffer failed — aborting SIP task");
         s_sip_task = NULL;
         return;
     }
@@ -1833,7 +1829,7 @@ static void sip_task(void *arg)
         // the flag via sip_register_request_reload().
         if (s_reload_requested) {
             s_reload_requested = false;
-            ESP_LOGI(TAG, "config reload requested → re-REGISTER with new creds");
+            pb_log_info(TAG, "config reload requested → re-REGISTER with new creds");
             // Refresh dial address too, in case the registrar host or
             // outbound proxy changed.
             char new_dial_host[64];
@@ -1855,7 +1851,7 @@ static void sip_task(void *arg)
             // for credential- or registrar-only changes.
             const char *want = canonical_transport();
             if (strcasecmp(want, sip_transport_via_token(ctx.transport)) != 0) {
-                ESP_LOGI(TAG, "transport changed %s → %s, reopening",
+                pb_log_info(TAG, "transport changed %s → %s, reopening",
                          sip_transport_via_token(ctx.transport), want);
                 sip_transport_t *nt =
                     sip_transport_open(config_sip_transport(), new_dial_host,
@@ -1868,7 +1864,7 @@ static void sip_task(void *arg)
                     // Reopen failed (e.g. TLS handshake rejected). Keep the
                     // old handle so we don't crash on NULL; the register
                     // below fails and schedules the usual 30 s retry.
-                    ESP_LOGE(TAG, "reopen as %s failed — keeping %s transport",
+                    pb_log_err(TAG, "reopen as %s failed — keeping %s transport",
                              want, sip_transport_via_token(ctx.transport));
                     sip_transport_resolve(ctx.transport, new_dial_host,
                                           new_dial_port, new_tls_sni);
@@ -1901,14 +1897,14 @@ static void sip_task(void *arg)
             s_registered = ok;
             stats_record_sip_state(ok);
             if (ok) {
-                ESP_LOGI(TAG, "re-REGISTERED after config change (granted %d s)",
+                pb_log_info(TAG, "re-REGISTERED after config change (granted %d s)",
                          granted_expires);
                 s_binding_expires_at_us = (int64_t)pb_monotonic_us()
                                         + (int64_t)granted_expires * 1000000LL;
                 s_pending_error[0] = '\0';
                 refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)(granted_expires / 2) * 1000000LL;
             } else {
-                ESP_LOGE(TAG, "REGISTER with new config failed (%s), retry in %d s",
+                pb_log_err(TAG, "REGISTER with new config failed (%s), retry in %d s",
                          err[0] ? err : "no detail", retry_delay_s);
                 s_binding_expires_at_us = 0;
                 s_pending_error[0] = '\0';
@@ -1925,7 +1921,7 @@ static void sip_task(void *arg)
             // A dropped TCP/TLS connection is worth surfacing: WARN so the
             // log hook records it, letting the operator correlate a
             // transport flap with whatever else they see in the log.
-            ESP_LOGW(TAG, "transport reconnected → re-REGISTER");
+            pb_log_warn(TAG, "transport reconnected → re-REGISTER");
             err[0] = '\0';
             r = do_register(&ctx, &granted_expires, err, sizeof(err));
             // A REGISTER is traffic; defer the idle keepalive a full
@@ -1943,7 +1939,7 @@ static void sip_task(void *arg)
                 s_pending_error[0] = '\0';
                 refresh_at_us = (int64_t)pb_monotonic_us() + (int64_t)(granted_expires / 2) * 1000000LL;
             } else {
-                ESP_LOGE(TAG, "re-REGISTER after reconnect failed (%s), retry in %d s",
+                pb_log_err(TAG, "re-REGISTER after reconnect failed (%s), retry in %d s",
                          err[0] ? err : "no detail", retry_delay_s);
                 s_binding_expires_at_us = 0;
                 s_pending_error[0] = '\0';
@@ -1980,19 +1976,19 @@ static void sip_task(void *arg)
             if (ctx.dialog.bye_at_us && now >= ctx.dialog.bye_at_us) {
                 ctx.dialog.bye_at_us = 0;
                 if (ctx.dialog.state == DIALOG_STREAMING) {
-                    ESP_LOGI(TAG, "tone finished → sending BYE");
+                    pb_log_info(TAG, "tone finished → sending BYE");
                     send_bye(&ctx);
                 } else if (ctx.dialog.state == DIALOG_ANSWERED) {
                     // ACK for our 200 OK never arrived (SIP_ACK_TIMEOUT_US) —
                     // don't wedge the single dialog slot; BYE and free it so
                     // the next call can be screened.
-                    ESP_LOGW(TAG, "ACK timeout in ANSWERED → BYE, freeing dialog");
+                    pb_log_warn(TAG, "ACK timeout in ANSWERED → BYE, freeing dialog");
                     send_bye(&ctx);
                 } else if (ctx.dialog.state == DIALOG_PROCEEDING) {
                     // #380: the other phones have had SIP_DECLINE_DELAY_US to
                     // start ringing; now decline with 480 (built from the
                     // stored INVITE) and observe whether they keep ringing.
-                    ESP_LOGI(TAG, "decline delay elapsed → 480 Temporarily Unavailable");
+                    pb_log_info(TAG, "decline delay elapsed → 480 Temporarily Unavailable");
                     send_response(&ctx, &ctx.dialog.peer,
                                   ctx.dialog.invite_msg, ctx.dialog.invite_len,
                                   480, "Temporarily Unavailable",
@@ -2003,11 +1999,11 @@ static void sip_task(void *arg)
                     ctx.dialog.bye_at_us = now + SIP_TEARDOWN_TIMEOUT_US;
                 } else if (ctx.dialog.state == DIALOG_REJECTED) {
                     // ACK to our 480 never arrived — return to rest.
-                    ESP_LOGI(TAG, "ACK timeout after 480 → dialog reset to idle");
+                    pb_log_info(TAG, "ACK timeout after 480 → dialog reset to idle");
                     memset(&ctx.dialog, 0, sizeof(ctx.dialog));
                 } else if (ctx.dialog.state == DIALOG_BYE_SENT) {
                     // 200 to our BYE never arrived — return to rest.
-                    ESP_LOGI(TAG, "200 timeout after BYE → dialog reset to idle");
+                    pb_log_info(TAG, "200 timeout after BYE → dialog reset to idle");
                     memset(&ctx.dialog, 0, sizeof(ctx.dialog));
                 }
                 continue;
@@ -2022,7 +2018,7 @@ static void sip_task(void *arg)
             if (now >= keepalive_at_us) {
                 if (now < refresh_at_us) {
                     sip_transport_send(ctx.transport, "\r\n\r\n", 4);
-                    ESP_LOGI(TAG, "→ SIP keepalive ping (4 bytes)");
+                    pb_log_info(TAG, "→ SIP keepalive ping (4 bytes)");
                 }
                 keepalive_at_us = now + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
             }
@@ -2042,7 +2038,7 @@ static void sip_task(void *arg)
             // REGISTER is traffic, so the next ping is a full interval out.
             keepalive_at_us = now + (int64_t)SIP_KEEPALIVE_INTERVAL_S * 1000000LL;
             if (r == REGISTER_OK) {
-                ESP_LOGI(TAG, "re-REGISTERED (granted %d s)", granted_expires);
+                pb_log_info(TAG, "re-REGISTERED (granted %d s)", granted_expires);
                 if (!s_registered) stats_record_sip_state(true);
                 s_registered = true;
                 s_binding_expires_at_us = now + (int64_t)granted_expires * 1000000LL;
@@ -2062,7 +2058,7 @@ static void sip_task(void *arg)
                 // branch below logs the stashed reason at ERROR as a single
                 // dashboard entry. Keeping the covered case off WARN/ERROR
                 // stops the web "Protokoll" ring filling with blips (#402).
-                ESP_LOGI(TAG, "re-REGISTER transient (%s) — binding valid "
+                pb_log_info(TAG, "re-REGISTER transient (%s) — binding valid "
                               "for %lld s more, retry in %d s",
                          err, (long long)left_s, retry_delay_s);
                 if (err[0]) {
@@ -2087,7 +2083,7 @@ static void sip_task(void *arg)
                     snprintf(msg, sizeof(msg), "%.127s",
                              err[0] ? err : "REGISTER failed");
                 }
-                ESP_LOGE(TAG, "re-REGISTER failed: %s — retry in %d s",
+                pb_log_err(TAG, "re-REGISTER failed: %s — retry in %d s",
                          msg, retry_delay_s);
                 s_binding_expires_at_us = 0;
                 s_pending_error[0] = '\0';
@@ -2130,14 +2126,14 @@ void sip_register_start(void)
     // registrar's response surface in the status UI.
     if (strlen(config_sip_host()) == 0 ||
         strlen(config_sip_user()) == 0) {
-        ESP_LOGW(TAG, "SIP config incomplete, skipping registration");
+        pb_log_warn(TAG, "SIP config incomplete, skipping registration");
         return;
     }
     if (s_sip_task) {
         // Already running — request_reload() handles credential changes.
         return;
     }
-    ESP_LOGI(TAG, "starting SIP registrar task (host=%s user=%s)",
+    pb_log_info(TAG, "starting SIP registrar task (host=%s user=%s)",
              config_sip_host(), config_sip_user());
     // Stack sized for the synchronous HTTPS check in handle_invite(): mbedtls
     // pk_verify spikes 6–8 KB during the TLS handshake to phoneblock.net,

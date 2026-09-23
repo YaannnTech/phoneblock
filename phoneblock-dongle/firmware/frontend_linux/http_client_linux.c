@@ -49,7 +49,10 @@ int pb_http_get(const char *url, const char *bearer_token,
     response_buffer_t buffer = { .maximum = maximum_body };
     struct curl_slist *headers = NULL;
     if (bearer_token && bearer_token[0]) {
-        size_t header_length = strlen(bearer_token) + 22;
+        // +1 for the NUL terminator: without it, snprintf truncates the
+        // last character of the token to stay within the buffer, silently
+        // sending a corrupt (and therefore always-401) bearer token.
+        size_t header_length = strlen(bearer_token) + 22 + 1;
         char *header = malloc(header_length);
         if (!header) {
             curl_easy_cleanup(curl);

@@ -79,6 +79,12 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     sip_transport_t *transport = sip_transport_open("udp", host, port,
                                                      NULL, local_port);
     if (!transport) return -1;
+    // This is the exact address Fritz!Box gets told to send calls to (the
+    // Contact header uses it) — if it's wrong, REGISTER still succeeds but
+    // no INVITE ever arrives.
+    pb_log_info("sip", "SIP transport open, advertising %s:%d as Contact",
+                sip_transport_local_ip(transport),
+                sip_transport_local_port(transport));
     int registration_status = 0;
     char challenge[256];
     if (pb_linux_sip_register_on_transport(transport, host, port, user,
@@ -92,8 +98,9 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         return -1;
     }
     pb_linux_sip_state_set_registered(true);
-    pb_log_info("sip", "REGISTERED as %s@%s:%d, local SIP port %d",
-                user, host, port, sip_transport_local_port(transport));
+    pb_log_info("sip", "REGISTERED as %s@%s:%d, Contact %s:%d",
+                user, host, port, sip_transport_local_ip(transport),
+                sip_transport_local_port(transport));
     uint64_t next_register_us = pb_monotonic_us() + 1800ULL * 1000000ULL;
 
     char packet[8192];

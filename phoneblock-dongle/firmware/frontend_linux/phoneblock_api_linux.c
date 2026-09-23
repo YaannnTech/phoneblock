@@ -2,6 +2,7 @@
 
 #include "api_scan.h"
 #include "http_client_linux.h"
+#include "platform.h"
 
 #include <openssl/sha.h>
 #include <stdio.h>
@@ -108,6 +109,10 @@ int pb_linux_phoneblock_check(const char *base_url, const char *token,
 
     pb_http_response_t response;
     if (pb_http_get(url, token, 1024 * 1024, &response) != 0) return -1;
+    if (response.status != 200) {
+        pb_log_warn("http", "PhoneBlock check returned HTTP %ld for %s",
+                    response.status, url);
+    }
     int result = response.status == 200
         ? pb_linux_classify_check(phone_number, response.body,
                                   response.length, minimum_direct,

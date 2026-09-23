@@ -227,11 +227,17 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     pb_linux_build_sdp_answer(advertised_host,
                                               rtp_port, sdp_answer,
                                               sizeof(sdp_answer));
+                } else {
+                    // The PhoneBlock check itself failed (network/API error,
+                    // not a verdict) -- fail safe like an unclassifiable
+                    // caller instead of silently answering with dead air.
+                    pb_linux_sip_stats_error();
+                    response_status = 486;
+                    response_reason = "Busy Here";
                 }
-                if (phone_result != 0) pb_linux_sip_stats_error();
                 pb_log_info("sip", "INVITE %s classified as %s",
-                            number, phone_result == 0
-                                && check.verdict == VERDICT_SPAM ? "SPAM" : "not SPAM");
+                            number, phone_result != 0 ? "UNKNOWN (check failed)"
+                                : (check.verdict == VERDICT_SPAM ? "SPAM" : "not SPAM"));
             } else {
                 pb_linux_sip_stats_error();
                 response_status = 486;

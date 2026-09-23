@@ -84,23 +84,26 @@ test_sip_transport_linux: test_sip_transport_linux.c ../frontend_linux/sip_trans
 	../frontend_linux/sip_transport_linux.c ../core/platform_linux.c -o $@
 
 test_http_client_linux: test_http_client_linux.c ../frontend_linux/http_client_linux.c \
-			../frontend_linux/http_client_linux.h
-	$(CC) $(CFLAGS) -I../frontend_linux test_http_client_linux.c \
-	../frontend_linux/http_client_linux.c $$(pkg-config --cflags --libs libcurl) -o $@
+			../frontend_linux/http_client_linux.h ../core/platform_linux.c
+	$(CC) $(CFLAGS) -I../frontend_linux -I../core test_http_client_linux.c \
+	../frontend_linux/http_client_linux.c ../core/platform_linux.c \
+	$$(pkg-config --cflags --libs libcurl) -o $@
 
 test_phoneblock_api_linux: test_phoneblock_api_linux.c ../frontend_linux/phoneblock_api_linux.c \
 			   ../frontend_linux/phoneblock_api_linux.h ../main/api_scan.c \
 			   ../main/api_scan.h ../frontend_linux/http_client_linux.c \
-			   ../frontend_linux/http_client_linux.h
-	$(CC) $(CFLAGS) $(CJSON_CFLAGS) -I../frontend_linux test_phoneblock_api_linux.c \
+			   ../frontend_linux/http_client_linux.h ../core/platform_linux.c
+	$(CC) $(CFLAGS) $(CJSON_CFLAGS) -I../frontend_linux -I../core test_phoneblock_api_linux.c \
 	../frontend_linux/phoneblock_api_linux.c ../main/api_scan.c \
-	../frontend_linux/http_client_linux.c $(CJSON_LIBS) \
+	../frontend_linux/http_client_linux.c ../core/platform_linux.c $(CJSON_LIBS) \
 	$$(pkg-config --cflags --libs libcurl openssl) -o $@
 
 test_tr064_client_linux: test_tr064_client_linux.c ../frontend_linux/tr064_client_linux.c \
-			 ../frontend_linux/tr064_client_linux.h ../frontend_linux/http_client_linux.c
-	$(CC) $(CFLAGS) -I../frontend_linux -pthread test_tr064_client_linux.c \
+			 ../frontend_linux/tr064_client_linux.h ../frontend_linux/http_client_linux.c \
+			 ../core/platform_linux.c
+	$(CC) $(CFLAGS) -I../frontend_linux -I../core -pthread test_tr064_client_linux.c \
 	../frontend_linux/tr064_client_linux.c ../frontend_linux/http_client_linux.c \
+	../core/platform_linux.c \
 	$$(pkg-config --cflags --libs libcurl) -o $@
 
 test_sip_register_linux: test_sip_register_linux.c ../frontend_linux/sip_register_linux.c \

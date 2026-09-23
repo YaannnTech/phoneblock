@@ -1,5 +1,7 @@
 #include "http_client_linux.h"
 
+#include "platform.h"
+
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,6 +81,9 @@ int pb_http_get(const char *url, const char *bearer_token,
     curl_easy_cleanup(curl);
 
     if (result != CURLE_OK || buffer.overflow || !buffer.data) {
+        pb_log_warn("http", "GET %s failed: %s%s", url,
+                    curl_easy_strerror(result),
+                    buffer.overflow ? " (response exceeded size limit)" : "");
         free(buffer.data);
         return -1;
     }
@@ -133,6 +138,9 @@ int pb_http_post_xml(const char *url, const char *soap_action,
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     if (result != CURLE_OK || buffer.overflow || !buffer.data) {
+        pb_log_warn("http", "POST %s failed: %s%s", url,
+                    curl_easy_strerror(result),
+                    buffer.overflow ? " (response exceeded size limit)" : "");
         free(buffer.data);
         return -1;
     }

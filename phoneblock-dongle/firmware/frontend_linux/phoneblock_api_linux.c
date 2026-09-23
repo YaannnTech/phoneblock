@@ -110,8 +110,11 @@ int pb_linux_phoneblock_check(const char *base_url, const char *token,
     pb_http_response_t response;
     if (pb_http_get(url, token, 1024 * 1024, &response) != 0) return -1;
     if (response.status != 200) {
-        pb_log_warn("http", "PhoneBlock check returned HTTP %ld for %s",
-                    response.status, url);
+        size_t token_length = token ? strlen(token) : 0;
+        pb_log_warn("http", "PhoneBlock check returned HTTP %ld for %s "
+                    "(token %zu chars, prefix \"%.6s\")",
+                    response.status, url, token_length,
+                    token_length > 0 ? token : "<empty>");
     }
     int result = response.status == 200
         ? pb_linux_classify_check(phone_number, response.body,

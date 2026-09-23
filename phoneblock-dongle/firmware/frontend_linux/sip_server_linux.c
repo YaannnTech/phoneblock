@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 typedef struct {
     char host[64];
@@ -91,6 +92,8 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         return -1;
     }
     pb_linux_sip_state_set_registered(true);
+    pb_log_info("sip", "REGISTERED as %s@%s:%d, local SIP port %d",
+                user, host, port, sip_transport_local_port(transport));
     uint64_t next_register_us = pb_monotonic_us() + 1800ULL * 1000000ULL;
 
     char packet[8192];
@@ -122,6 +125,11 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         packet[length] = '\0';
         char method[16];
         parse_method(packet, length, method, sizeof(method));
+        // Unconditional: confirms whether a datagram reaches this process at
+        // all, independent of method-specific logging further down — the
+        // only visibility we had before was for ACK/BYE/classified INVITEs.
+        pb_log_info("sip", "recv %s from %s:%d (%d bytes)", method,
+                    inet_ntoa(peer.sin_addr), ntohs(peer.sin_port), length);
         if (strcmp(method, "ACK") == 0) {
             char ack_call_id[256];
             parse_call_id(packet, length, ack_call_id, sizeof(ack_call_id));

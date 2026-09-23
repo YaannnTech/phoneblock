@@ -80,6 +80,22 @@ uint32_t pb_random_u32(void)
     return value ^ (uint32_t)(uintptr_t)&value;
 }
 
+void pb_random_fill(void *out, size_t len)
+{
+    uint8_t *cursor = out;
+    while (len > 0) {
+        ssize_t count = getrandom(cursor, len, 0);
+        if (count <= 0) {
+            uint32_t fallback = pb_random_u32();
+            size_t chunk = len < sizeof(fallback) ? len : sizeof(fallback);
+            memcpy(cursor, &fallback, chunk);
+            count = (ssize_t)chunk;
+        }
+        cursor += count;
+        len -= (size_t)count;
+    }
+}
+
 int pb_watchdog_is_subscribed(void)
 {
     return 0;

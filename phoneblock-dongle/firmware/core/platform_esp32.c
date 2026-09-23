@@ -60,6 +60,11 @@ uint32_t pb_random_u32(void)
     return esp_random();
 }
 
+void pb_random_fill(void *out, size_t len)
+{
+    esp_fill_random(out, len);
+}
+
 int pb_watchdog_is_subscribed(void)
 {
     return esp_task_wdt_status(NULL) == ESP_OK;

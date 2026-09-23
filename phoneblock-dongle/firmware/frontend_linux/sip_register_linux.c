@@ -35,6 +35,7 @@ static int build_register(const sip_transport_t *transport, const char *host,
                           const char *user, unsigned int cseq,
                           uint32_t registration_id,
                           const char *authorization,
+                          const char *contact_host, int contact_port,
                           char *out, size_t capacity)
 {
     uint32_t branch = pb_random_u32();
@@ -54,8 +55,7 @@ static int build_register(const sip_transport_t *transport, const char *host,
         host, sip_transport_local_ip(transport), sip_transport_local_port(transport),
         branch, user, host, registration_id ^ 0x13579bdfu,
         user, host, registration_id, host, cseq,
-        user, host,
-        sip_transport_local_port(transport),
+        user, contact_host, contact_port,
         authorization ? authorization : "");
 }
 
@@ -101,6 +101,7 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                                        const char *host, int port,
                                        const char *user, const char *password,
                                        const char *auth_user, const char *realm,
+                                       const char *contact_host, int contact_port,
                                        int *status, char *challenge,
                                        int challenge_cap)
 {
@@ -116,6 +117,7 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
     uint32_t registration_id = pb_random_u32();
     int request_length = build_register(transport, host, user, 1,
                                         registration_id, NULL,
+                                        contact_host, contact_port,
                                         request, sizeof(request));
     if (request_length < 0 || (size_t)request_length >= sizeof(request)
             || sip_transport_send(transport, request, request_length) < 0) {
@@ -157,6 +159,7 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                                    authorization, sizeof(authorization));
         request_length = build_register(transport, host, user, 2,
                         registration_id, authorization,
+                        contact_host, contact_port,
                                         request, sizeof(request));
         if (request_length < 0 || (size_t)request_length >= sizeof(request)
                 || sip_transport_send(transport, request, request_length) < 0) {
@@ -165,7 +168,6 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
         response_length = sip_transport_recv(transport, 3000, response,
                                               sizeof(response) - 1, &from);
         if (response_length <= 0) {
-            sip_transport_close(transport);
             return -1;
         }
         response[response_length] = '\0';
@@ -188,8 +190,9 @@ int pb_linux_sip_register_probe(const char *host, int port,
                                                      NULL, local_port);
     if (!transport) return -1;
     int result = pb_linux_sip_register_on_transport(
-        transport, host, port, user, password, auth_user, realm, status,
-        challenge, challenge_cap);
+        transport, host, port, user, password, auth_user, realm,
+        sip_transport_local_ip(transport), sip_transport_local_port(transport),
+        status, challenge, challenge_cap);
     sip_transport_close(transport);
     return result;
 }

@@ -115,10 +115,12 @@ int pb_linux_web_serve(int port, const char *bind_host,
                 char body[2048];
                 snprintf(body, sizeof(body),
                          "{\"sip_host\":\"%s\",\"sip_port\":%d,\"sip_user\":\"%s\","
-                         "\"sip_local_port\":%d,\"rtp_port\":%d,\"phoneblock_base_url\":\"%s\"}\n",
+                         "\"sip_local_port\":%d,\"rtp_port\":%d,\"phoneblock_base_url\":\"%s\","
+                         "\"contact_host\":\"%s\",\"contact_port\":%d}\n",
                          config.sip_host, config.sip_port, config.sip_user,
                          config.sip_local_port, config.rtp_port,
-                         config.phoneblock_base_url);
+                         config.phoneblock_base_url,
+                         config.contact_host, config.contact_port);
                 send_response(client, 200, "OK", "application/json", body);
             }
         } else if (strncmp(request, "POST /api/config ", 17) == 0) {
@@ -141,9 +143,12 @@ int pb_linux_web_serve(int port, const char *bind_host,
                                  sizeof(config.phoneblock_base_url));
                 copy_form_string(body, "phoneblock_token", new_token,
                                  sizeof(new_token));
+                copy_form_string(body, "contact_host", config.contact_host,
+                                 sizeof(config.contact_host));
                 config.sip_port = form_int(body, "sip_port", config.sip_port);
                 config.sip_local_port = form_int(body, "sip_local_port", config.sip_local_port);
                 config.rtp_port = form_int(body, "rtp_port", config.rtp_port);
+                config.contact_port = form_int(body, "contact_port", config.contact_port);
                 if (new_password[0]) {
                     strncpy(config.sip_pass, new_password, sizeof(config.sip_pass) - 1);
                     config.sip_pass[sizeof(config.sip_pass) - 1] = '\0';
@@ -162,6 +167,8 @@ int pb_linux_web_serve(int port, const char *bind_host,
                     error = "Local SIP port must be between 1 and 65535";
                 else if (config.rtp_port < 1 || config.rtp_port > 65535)
                     error = "RTP port must be between 1 and 65535";
+                else if (config.contact_port < 0 || config.contact_port > 65535)
+                    error = "Advertised port must be between 0 and 65535";
                 else if (strncmp(config.phoneblock_base_url, "http://", 7) != 0
                          && strncmp(config.phoneblock_base_url, "https://", 8) != 0)
                     error = "PhoneBlock API URL must start with http:// or https://";
@@ -275,6 +282,8 @@ static const char *dashboard_html(void)
         "<label>RTP port<input name=\"rtp_port\" type=\"number\"></label>"
         "<label class=\"wide\">PhoneBlock API URL<input name=\"phoneblock_base_url\"></label>"
         "<label class=\"wide\">PhoneBlock token<input name=\"phoneblock_token\" type=\"password\" placeholder=\"unchanged\"></label>"
+        "<label>Advertised host (NAT/routed setups)<input name=\"contact_host\" placeholder=\"leave empty unless behind NAT\"></label>"
+        "<label>Advertised port<input name=\"contact_port\" type=\"number\" min=\"0\" max=\"65535\" placeholder=\"leave empty unless behind NAT\"></label>"
         "<div class=\"wide\"><button type=\"submit\">Save configuration</button>"
         "<span id=\"message\" class=\"muted\"></span></div></form></section>"
         "<p class=\"muted\">Restart the add-on after changing SIP settings.</p>"

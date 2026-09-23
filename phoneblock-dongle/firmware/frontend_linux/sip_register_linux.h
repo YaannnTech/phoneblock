@@ -17,5 +17,6 @@ int pb_linux_sip_register_probe(const char *host, int port,
                                         const char *host, int port,
                                         const char *user, const char *password,
                                         const char *auth_user, const char *realm,
+                                        const char *contact_host, int contact_port,
                                         int *status, char *challenge,
                                         int challenge_cap);

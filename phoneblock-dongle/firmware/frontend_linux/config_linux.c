@@ -58,6 +58,9 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
     if (pb_config_file_get(&file, "sip_realm", value, sizeof(value)) == 1) {
         copy_value(config->sip_realm, sizeof(config->sip_realm), value);
     }
+    if (pb_config_file_get(&file, "contact_host", value, sizeof(value)) == 1) {
+        copy_value(config->contact_host, sizeof(config->contact_host), value);
+    }
     if (pb_config_file_get(&file, "phoneblock_base_url", value,
                            sizeof(value)) == 1) {
         copy_value(config->phoneblock_base_url,
@@ -90,6 +93,8 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
                                                      1, 65535);
     config->rtp_port = pb_config_file_get_int(&file, "rtp_port",
                                                config->rtp_port, 1, 65535);
+    config->contact_port = pb_config_file_get_int(&file, "contact_port",
+                                                   config->contact_port, 0, 65535);
     config->fritzbox_port = pb_config_file_get_int(&file, "fritzbox_port",
                                                     config->fritzbox_port, 1, 65535);
     return 0;
@@ -115,6 +120,7 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
             || pb_config_file_set(&file, "sip_pass", config->sip_pass) != 0
             || pb_config_file_set(&file, "sip_authuser", config->sip_authuser) != 0
             || pb_config_file_set(&file, "sip_realm", config->sip_realm) != 0
+            || pb_config_file_set(&file, "contact_host", config->contact_host) != 0
             || pb_config_file_set(&file, "phoneblock_base_url",
                       config->phoneblock_base_url) != 0
             || pb_config_file_set(&file, "phoneblock_token",
@@ -135,6 +141,8 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
     if (pb_config_file_set(&file, "sip_local_port", number) != 0) return -1;
     snprintf(number, sizeof(number), "%d", config->rtp_port);
     if (pb_config_file_set(&file, "rtp_port", number) != 0) return -1;
+    snprintf(number, sizeof(number), "%d", config->contact_port);
+    if (pb_config_file_set(&file, "contact_port", number) != 0) return -1;
     snprintf(number, sizeof(number), "%d", config->fritzbox_port);
     if (pb_config_file_set(&file, "fritzbox_port", number) != 0) return -1;
     return pb_config_file_save(path, &file);

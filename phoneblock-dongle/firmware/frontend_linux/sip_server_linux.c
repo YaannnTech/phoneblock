@@ -72,6 +72,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                         int local_port, const char *phoneblock_base_url,
                         const char *phoneblock_token,
                         const char *announcement_path, int rtp_port,
+                        const char *contact_host, int contact_port,
                         volatile sig_atomic_t *stop_requested)
 {
     if (!host || !user || !password || !stop_requested) return -1;
@@ -79,16 +80,22 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     sip_transport_t *transport = sip_transport_open("udp", host, port,
                                                      NULL, local_port);
     if (!transport) return -1;
+    // Falls back to the transport's own discovered address when no override
+    // is configured, preserving today's behavior on a flat single-subnet LAN.
+    const char *advertised_host = (contact_host && contact_host[0])
+        ? contact_host : sip_transport_local_ip(transport);
+    int advertised_port = contact_port > 0
+        ? contact_port : sip_transport_local_port(transport);
     // This is the exact address Fritz!Box gets told to send calls to (the
     // Contact header uses it) — if it's wrong, REGISTER still succeeds but
     // no INVITE ever arrives.
     pb_log_info("sip", "SIP transport open, advertising %s:%d as Contact",
-                sip_transport_local_ip(transport),
-                sip_transport_local_port(transport));
+                advertised_host, advertised_port);
     int registration_status = 0;
     char challenge[256];
     if (pb_linux_sip_register_on_transport(transport, host, port, user,
                                            password, auth_user, realm,
+                                           advertised_host, advertised_port,
                                            &registration_status,
                                            challenge, sizeof(challenge)) != 0
             || registration_status != 200) {
@@ -99,8 +106,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     }
     pb_linux_sip_state_set_registered(true);
     pb_log_info("sip", "REGISTERED as %s@%s:%d, Contact %s:%d",
-                user, host, port, sip_transport_local_ip(transport),
-                sip_transport_local_port(transport));
+                user, host, port, advertised_host, advertised_port);
     uint64_t next_register_us = pb_monotonic_us() + 1800ULL * 1000000ULL;
 
     char packet[8192];
@@ -114,6 +120,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
             registration_status = 0;
             int register_result = pb_linux_sip_register_on_transport(
                 transport, host, port, user, password, auth_user, realm,
+                advertised_host, advertised_port,
                 &registration_status,
                 challenge, sizeof(challenge));
             if (register_result == 0 && registration_status == 200) {
@@ -172,8 +179,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                 packet, length, matching_bye ? 200 : 481,
                 matching_bye ? "OK" : "Call/Transaction Does Not Exist",
                 "linux", NULL, user,
-                sip_transport_local_ip(transport),
-                sip_transport_local_port(transport), response, sizeof(response));
+                advertised_host, advertised_port, response, sizeof(response));
             if (bye_response_length > 0) {
                 sip_transport_send_to(transport, &peer, response, bye_response_length);
             }
@@ -218,7 +224,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
                     parse_sdp_connection_ip(packet, length, remote_rtp_ip,
                                              sizeof(remote_rtp_ip));
                     remote_rtp_port = parse_sdp_audio_port(packet, length);
-                    pb_linux_build_sdp_answer(sip_transport_local_ip(transport),
+                    pb_linux_build_sdp_answer(advertised_host,
                                               rtp_port, sdp_answer,
                                               sizeof(sdp_answer));
                 }
@@ -235,8 +241,7 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         int response_length = sip_response_build(
             packet, length, response_status, response_reason, "linux",
             sdp_answer[0] ? sdp_answer : NULL, user,
-            sip_transport_local_ip(transport),
-            sip_transport_local_port(transport), response, sizeof(response));
+            advertised_host, advertised_port, response, sizeof(response));
         if (response_length > 0) {
             sip_transport_send_to(transport, &peer, response, response_length);
             if (spam_call && remote_rtp_ip[0] && remote_rtp_port > 0

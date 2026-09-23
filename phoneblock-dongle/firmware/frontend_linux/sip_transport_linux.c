@@ -63,20 +63,36 @@ sip_transport_t *sip_transport_open(const char *transport,
         .sin_port = htons(local_port),
     };
     if (bind(transport_state->socket, (struct sockaddr *)&local,
-             sizeof(local)) != 0
-            || connect(transport_state->socket,
-                       (struct sockaddr *)&transport_state->registrar,
-                       sizeof(transport_state->registrar)) != 0) {
+             sizeof(local)) != 0) {
         close(transport_state->socket);
         free(transport_state);
         return NULL;
+    }
+    // Deliberately do NOT connect() this socket: a connected UDP socket only
+    // accepts datagrams from that exact peer address+port, silently dropping
+    // an INVITE that the Fritz!Box sends from a different local port than
+    // its registrar used for the REGISTER response. A throwaway socket is
+    // connected instead, purely to let the kernel pick the outbound-route
+    // local IP for the Contact header via getsockname().
+    int probe = socket(AF_INET, SOCK_DGRAM, 0);
+    if (probe >= 0) {
+        if (connect(probe, (struct sockaddr *)&transport_state->registrar,
+                    sizeof(transport_state->registrar)) == 0) {
+            struct sockaddr_in local_addr;
+            socklen_t local_length = sizeof(local_addr);
+            if (getsockname(probe, (struct sockaddr *)&local_addr,
+                            &local_length) == 0) {
+                inet_ntop(AF_INET, &local_addr.sin_addr,
+                          transport_state->local_ip,
+                          sizeof(transport_state->local_ip));
+            }
+        }
+        close(probe);
     }
     socklen_t local_length = sizeof(local);
     if (getsockname(transport_state->socket, (struct sockaddr *)&local,
                     &local_length) == 0) {
         transport_state->local_port = ntohs(local.sin_port);
-        inet_ntop(AF_INET, &local.sin_addr, transport_state->local_ip,
-                  sizeof(transport_state->local_ip));
     }
     return transport_state;
 }
@@ -94,15 +110,15 @@ bool sip_transport_resolve(sip_transport_t *transport,
 {
     (void)tls_sni;
     if (!transport || !registrar_host || registrar_port <= 0) return false;
-    return resolve_ipv4(registrar_host, registrar_port, &transport->registrar) == 0
-        && connect(transport->socket, (struct sockaddr *)&transport->registrar,
-                   sizeof(transport->registrar)) == 0;
+    return resolve_ipv4(registrar_host, registrar_port, &transport->registrar) == 0;
 }
 
 int sip_transport_send(sip_transport_t *transport, const void *buffer, int length)
 {
     if (!transport) return -1;
-    return (int)send(transport->socket, buffer, (size_t)length, 0);
+    return (int)sendto(transport->socket, buffer, (size_t)length, 0,
+                       (const struct sockaddr *)&transport->registrar,
+                       sizeof(transport->registrar));
 }
 
 int sip_transport_send_to(sip_transport_t *transport,

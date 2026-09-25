@@ -145,6 +145,21 @@ static int announcement_preset_path(const char *code, char *path, size_t capacit
     return length < 0 || (size_t)length >= capacity ? -1 : 0;
 }
 
+static const char *announcement_preset_for_path(const char *path)
+{
+    static char preset_path[256];
+    for (size_t index = 0;
+         index < sizeof(ANNOUNCEMENT_PRESETS) / sizeof(ANNOUNCEMENT_PRESETS[0]);
+         index++) {
+        if (announcement_preset_path(ANNOUNCEMENT_PRESETS[index].code,
+                                     preset_path, sizeof(preset_path)) == 0
+                && strcmp(path, preset_path) == 0) {
+            return ANNOUNCEMENT_PRESETS[index].code;
+        }
+    }
+    return "custom";
+}
+
 static int send_file_response(int client, const char *path,
                               const char *content_type)
 {
@@ -282,12 +297,14 @@ int pb_linux_web_serve(int port, const char *bind_host,
                          "{\"sip_host\":\"%s\",\"sip_port\":%d,\"sip_user\":\"%s\","
                          "\"sip_local_port\":%d,\"rtp_port\":%d,\"phoneblock_base_url\":\"%s\","
                          "\"contact_host\":\"%s\",\"contact_port\":%d,"
-                         "\"announcement_path\":\"%s\",\"announcement_enabled\":%d}\n",
+                         "\"announcement_path\":\"%s\",\"announcement_enabled\":%d,"
+                         "\"announcement_preset\":\"%s\"}\n",
                          config.sip_host, config.sip_port, config.sip_user,
                          config.sip_local_port, config.rtp_port,
                          config.phoneblock_base_url,
                          config.contact_host, config.contact_port,
-                         config.announcement_path, config.announcement_enabled);
+                         config.announcement_path, config.announcement_enabled,
+                         announcement_preset_for_path(config.announcement_path));
                 send_response(client, 200, "OK", "application/json", body);
             }
         } else if (strncmp(request, "GET /api/announcement/catalog ", 30) == 0) {
@@ -561,9 +578,9 @@ static const char *dashboard_html(void)
         "<button id=\"announcementCustomUse\" type=\"button\">Use my uploaded message</button>"
         "<span id=\"announcementMessage\" class=\"muted\"></span></section>"
         "<p class=\"muted\">Restart the add-on after changing SIP or announcement settings.</p>"
-        "<script>const q=s=>document.querySelector(s);async function load(){"
+        "<script>const q=s=>document.querySelector(s);let selectedAnnouncementPreset='';async function load(){"
         "const c=await fetch('/api/config').then(r=>r.json());for(const [k,v] of Object.entries(c)){"
-        "const e=q('[name=\\\"'+k+'\\\"]');if(e){if(e.type==='checkbox')e.checked=!!v;else e.value=v||'';}}const s=await fetch('/api/status').then(r=>r.json());"
+        "if(k==='announcement_preset')selectedAnnouncementPreset=v;const e=q('[name=\\\"'+k+'\\\"]');if(e){if(e.type==='checkbox')e.checked=!!v;else e.value=v||'';}}const s=await fetch('/api/status').then(r=>r.json());"
         "q('#status').textContent=s.registered?'SIP registration: registered':'SIP registration: not registered';"
         "q('#status').className=s.registered?'ok':'error';q('#details').innerHTML="
         "'Registrar: '+s.sipHost+':'+s.sipPort+'<br>SIP user: '+s.sipUser+"
@@ -590,7 +607,8 @@ static const char *dashboard_html(void)
         "const source=context.createBufferSource();source.buffer=buffer;source.connect(context.destination);"
         "source.onended=()=>context.close();source.start();}"
         "async function loadPresets(){const d=await fetch('/api/announcement/catalog').then(r=>r.json()),s=q('#announcementPreset');"
-        "for(const p of d.presets){const o=document.createElement('option');o.value=p.code;o.textContent=p.label;s.appendChild(o);}}"
+        "for(const p of d.presets){const o=document.createElement('option');o.value=p.code;o.textContent=p.label;s.appendChild(o);}"
+        "if(selectedAnnouncementPreset&&selectedAnnouncementPreset!=='custom')s.value=selectedAnnouncementPreset;}"
         "q('#announcementPresetListen').onclick=async()=>{const c=q('#announcementPreset').value;"
         "playAlaw(new Uint8Array(await (await fetch('/api/announcement/preset?name='+c)).arrayBuffer()));};"
         "q('#announcementPresetUse').onclick=async()=>{const c=q('#announcementPreset').value,m=q('#announcementPresetMessage');"

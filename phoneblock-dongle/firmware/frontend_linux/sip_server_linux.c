@@ -12,6 +12,7 @@
 #include "sip_stats_linux.h"
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +34,14 @@ typedef struct {
 } rtp_stream_args_t;
 
 static volatile sig_atomic_t s_rtp_cancelled;
+
+static uint64_t sip_refresh_delay_us(int granted_expires)
+{
+    if (granted_expires <= 0) return 1800ULL * 1000000ULL;
+    uint64_t seconds = (uint64_t)granted_expires / 2;
+    if (seconds == 0) seconds = 1;
+    return seconds * 1000000ULL;
+}
 
 static int build_bye(const rtp_stream_args_t *args, char *out, size_t capacity)
 {
@@ -92,12 +101,14 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
     pb_log_info("sip", "SIP transport open, advertising %s:%d as Contact",
                 advertised_host, advertised_port);
     int registration_status = 0;
+    int granted_expires = -1;
     char challenge[256];
     if (pb_linux_sip_register_on_transport(transport, host, port, user,
                                            password, auth_user, realm,
                                            advertised_host, advertised_port,
                                            &registration_status,
-                                           challenge, sizeof(challenge)) != 0
+                                           challenge, sizeof(challenge),
+                                           &granted_expires) != 0
             || registration_status != 200) {
         pb_log_err("sip", "SIP registration failed with status %d",
                    registration_status);
@@ -105,9 +116,12 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         return -1;
     }
     pb_linux_sip_state_set_registered(true);
-    pb_log_info("sip", "REGISTERED as %s@%s:%d, Contact %s:%d",
-                user, host, port, advertised_host, advertised_port);
-    uint64_t next_register_us = pb_monotonic_us() + 1800ULL * 1000000ULL;
+    uint64_t refresh_delay_us = sip_refresh_delay_us(granted_expires);
+    pb_log_info("sip", "REGISTERED as %s@%s:%d, Contact %s:%d, expires %d s; "
+                "next refresh in %" PRIu64 " s",
+                user, host, port, advertised_host, advertised_port,
+                granted_expires, refresh_delay_us / 1000000ULL);
+    uint64_t next_register_us = pb_monotonic_us() + refresh_delay_us;
 
     char packet[8192];
     char response[4096];
@@ -118,14 +132,18 @@ int pb_linux_sip_listen(const char *host, int port, const char *user,
         uint64_t now_us = pb_monotonic_us();
         if (now_us >= next_register_us) {
             registration_status = 0;
+            granted_expires = -1;
             int register_result = pb_linux_sip_register_on_transport(
                 transport, host, port, user, password, auth_user, realm,
                 advertised_host, advertised_port,
                 &registration_status,
-                challenge, sizeof(challenge));
+                challenge, sizeof(challenge), &granted_expires);
             if (register_result == 0 && registration_status == 200) {
-                pb_log_info("sip", "SIP registration refreshed; next refresh in 1800 s");
-                next_register_us = now_us + 1800ULL * 1000000ULL;
+                refresh_delay_us = sip_refresh_delay_us(granted_expires);
+                pb_log_info("sip", "SIP registration refreshed; granted %d s; "
+                            "next refresh in %" PRIu64 " s",
+                            granted_expires, refresh_delay_us / 1000000ULL);
+                next_register_us = now_us + refresh_delay_us;
             } else {
                 pb_linux_sip_state_set_registered(false);
                 pb_log_warn("sip", "SIP refresh failed with status %d; retrying in 30 s",

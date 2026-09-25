@@ -31,6 +31,8 @@ static void md5_hex(const char *input, char output[33])
     output[32] = '\0';
 }
 
+#define SIP_REGISTER_REQUESTED_EXPIRES 3600
+
 static int build_register(const sip_transport_t *transport, const char *host,
                           const char *user, unsigned int cseq,
                           uint32_t registration_id,
@@ -48,14 +50,14 @@ static int build_register(const sip_transport_t *transport, const char *host,
         "Call-ID: %08x@%s\r\n"
         "CSeq: %u REGISTER\r\n"
         "Contact: <sip:%s@%s:%d>\r\n"
-        "Expires: 3600\r\n"
+        "Expires: %d\r\n"
         "%s"
         "User-Agent: PhoneBlock-Dongle/Linux\r\n"
         "Content-Length: 0\r\n\r\n",
         host, sip_transport_local_ip(transport), sip_transport_local_port(transport),
         branch, user, host, registration_id ^ 0x13579bdfu,
         user, host, registration_id, host, cseq,
-        user, contact_host, contact_port,
+        user, contact_host, contact_port, SIP_REGISTER_REQUESTED_EXPIRES,
         authorization ? authorization : "");
 }
 
@@ -103,7 +105,8 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                                        const char *auth_user, const char *realm,
                                        const char *contact_host, int contact_port,
                                        int *status, char *challenge,
-                                       int challenge_cap)
+                                       int challenge_cap,
+                                       int *granted_expires)
 {
     if (!transport || !host || !user || !password || !status || !challenge
             || challenge_cap <= 0) {
@@ -112,6 +115,7 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
     (void)port;
     *status = 0;
     challenge[0] = '\0';
+    if (granted_expires) *granted_expires = -1;
 
     char request[2048];
     uint32_t registration_id = pb_random_u32();
@@ -177,6 +181,11 @@ int pb_linux_sip_register_on_transport(sip_transport_t *transport,
                         *status);
         }
     }
+    if (*status == 200 && granted_expires) {
+        int parsed_expires = parse_register_expires(response, response_length, NULL);
+        *granted_expires = parsed_expires >= 0
+            ? parsed_expires : SIP_REGISTER_REQUESTED_EXPIRES;
+    }
     return 0;
 }
 
@@ -192,7 +201,7 @@ int pb_linux_sip_register_probe(const char *host, int port,
     int result = pb_linux_sip_register_on_transport(
         transport, host, port, user, password, auth_user, realm,
         sip_transport_local_ip(transport), sip_transport_local_port(transport),
-        status, challenge, challenge_cap);
+        status, challenge, challenge_cap, NULL);
     sip_transport_close(transport);
     return result;
 }

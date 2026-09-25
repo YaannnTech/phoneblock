@@ -23,6 +23,9 @@ void pb_linux_config_defaults(pb_linux_config_t *config)
                "https://phoneblock.net/phoneblock");
     copy_value(config->announcement_path, sizeof(config->announcement_path),
                "/usr/share/phoneblock/announcement.alaw");
+    copy_value(config->announcement_custom_path,
+               sizeof(config->announcement_custom_path),
+               "/var/lib/phoneblock/announcement.alaw");
     config->announcement_enabled = 1;
     copy_value(config->fritzbox_host, sizeof(config->fritzbox_host), "fritz.box");
     config->fritzbox_port = 49000;
@@ -77,6 +80,11 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
         copy_value(config->announcement_path,
                    sizeof(config->announcement_path), value);
     }
+    if (pb_config_file_get(&file, "announcement_custom_path", value,
+                           sizeof(value)) == 1) {
+        copy_value(config->announcement_custom_path,
+                   sizeof(config->announcement_custom_path), value);
+    }
     if (pb_config_file_get(&file, "fritzbox_host", value, sizeof(value)) == 1)
         copy_value(config->fritzbox_host, sizeof(config->fritzbox_host), value);
     if (pb_config_file_get(&file, "fritzbox_admin_user", value, sizeof(value)) == 1)
@@ -130,6 +138,8 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
                                   config->phoneblock_token) != 0
             || pb_config_file_set(&file, "announcement_path",
                                   config->announcement_path) != 0
+            || pb_config_file_set(&file, "announcement_custom_path",
+                                  config->announcement_custom_path) != 0
             || pb_config_file_set(&file, "fritzbox_host", config->fritzbox_host) != 0
             || pb_config_file_set(&file, "fritzbox_admin_user", config->fritzbox_admin_user) != 0
             || pb_config_file_set(&file, "fritzbox_admin_pass", config->fritzbox_admin_pass) != 0

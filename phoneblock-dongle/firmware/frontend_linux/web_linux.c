@@ -16,6 +16,23 @@
 #include <unistd.h>
 
 #define ANNOUNCEMENT_MAX_BYTES (240U * 1024U)
+#define ANNOUNCEMENT_PRESET_DIR "/usr/share/phoneblock/announcements"
+
+typedef struct {
+    const char *code;
+    const char *label;
+} announcement_preset_t;
+
+static const announcement_preset_t ANNOUNCEMENT_PRESETS[] = {
+    { "ar", "Arabic" },
+    { "de", "German" },
+    { "en", "English" },
+    { "es", "Spanish" },
+    { "fr", "French" },
+    { "it", "Italian" },
+    { "uk", "Ukrainian" },
+    { "zh", "Chinese" },
+};
 
 static int send_response(int client, int status, const char *reason,
                          const char *content_type, const char *body)
@@ -34,6 +51,8 @@ static int send_response(int client, int status, const char *reason,
 
 static void copy_form_string(const char *body, const char *key,
                              char *destination, size_t capacity);
+static int form_value(const char *body, const char *key,
+                      char *out, size_t capacity);
 static int form_int(const char *body, const char *key, int current);
 static const char *dashboard_html(void);
 
@@ -105,6 +124,80 @@ static int upload_announcement(int client, const char *request,
     }
     return send_response(client, 200, "OK", "application/json",
                          "{\"saved\":true}\n");
+}
+
+static const announcement_preset_t *find_announcement_preset(const char *code)
+{
+    for (size_t index = 0;
+         index < sizeof(ANNOUNCEMENT_PRESETS) / sizeof(ANNOUNCEMENT_PRESETS[0]);
+         index++) {
+        if (strcmp(code, ANNOUNCEMENT_PRESETS[index].code) == 0)
+            return &ANNOUNCEMENT_PRESETS[index];
+    }
+    return NULL;
+}
+
+static int announcement_preset_path(const char *code, char *path, size_t capacity)
+{
+    if (!find_announcement_preset(code)) return -1;
+    int length = snprintf(path, capacity, "%s/announcement-%s.alaw",
+                          ANNOUNCEMENT_PRESET_DIR, code);
+    return length < 0 || (size_t)length >= capacity ? -1 : 0;
+}
+
+static int send_file_response(int client, const char *path,
+                              const char *content_type)
+{
+    FILE *input = fopen(path, "rb");
+    if (!input) {
+        return send_response(client, 404, "Not Found",
+                             "text/plain; charset=utf-8", "Audio not found\n");
+    }
+    if (fseek(input, 0, SEEK_END) != 0) {
+        fclose(input);
+        return -1;
+    }
+    long file_length = ftell(input);
+    if (file_length < 0 || fseek(input, 0, SEEK_SET) != 0) {
+        fclose(input);
+        return -1;
+    }
+    char header[256];
+    int header_length = snprintf(header, sizeof(header),
+                                 "HTTP/1.1 200 OK\r\n"
+                                 "Content-Type: %s\r\n"
+                                 "Content-Length: %ld\r\n"
+                                 "Connection: close\r\n\r\n",
+                                 content_type, file_length);
+    if (header_length < 0 || (size_t)header_length >= sizeof(header)
+            || send(client, header, (size_t)header_length, 0) != header_length) {
+        fclose(input);
+        return -1;
+    }
+    char buffer[8192];
+    size_t count;
+    while ((count = fread(buffer, 1, sizeof(buffer), input)) > 0) {
+        if (send(client, buffer, count, 0) != (ssize_t)count) {
+            fclose(input);
+            return -1;
+        }
+    }
+    fclose(input);
+    return 0;
+}
+
+static int query_value(const char *request, const char *key,
+                       char *value, size_t capacity)
+{
+    const char *start = strstr(request, key);
+    if (!start) return 0;
+    start += strlen(key);
+    size_t length = 0;
+    while (start[length] && start[length] != '&' && start[length] != ' '
+            && length + 1 < capacity) length++;
+    memcpy(value, start, length);
+    value[length] = '\0';
+    return length > 0;
 }
 
 int pb_linux_web_serve(int port, const char *bind_host,
@@ -197,16 +290,95 @@ int pb_linux_web_serve(int port, const char *bind_host,
                          config.announcement_path, config.announcement_enabled);
                 send_response(client, 200, "OK", "application/json", body);
             }
+        } else if (strncmp(request, "GET /api/announcement/catalog ", 30) == 0) {
+            send_response(client, 200, "OK", "application/json",
+                          "{\"presets\":["
+                          "{\"code\":\"ar\",\"label\":\"Arabic\"},"
+                          "{\"code\":\"de\",\"label\":\"German\"},"
+                          "{\"code\":\"en\",\"label\":\"English\"},"
+                          "{\"code\":\"es\",\"label\":\"Spanish\"},"
+                          "{\"code\":\"fr\",\"label\":\"French\"},"
+                          "{\"code\":\"it\",\"label\":\"Italian\"},"
+                          "{\"code\":\"uk\",\"label\":\"Ukrainian\"},"
+                          "{\"code\":\"zh\",\"label\":\"Chinese\"}]}\n");
+        } else if (strncmp(request, "GET /api/announcement/preset?", 29) == 0) {
+            char code[8];
+            char path[256];
+            if (!query_value(request, "name=", code, sizeof(code))
+                    || announcement_preset_path(code, path, sizeof(path)) != 0) {
+                send_response(client, 400, "Bad Request",
+                              "text/plain; charset=utf-8", "Unknown preset\n");
+            } else {
+                send_file_response(client, path, "application/octet-stream");
+            }
+        } else if (strncmp(request, "POST /api/announcement/select ", 30) == 0) {
+            char *body = strstr(request, "\r\n\r\n");
+            pb_linux_config_t config;
+            char code[8];
+            char preset_path[256];
+            if (!body || pb_linux_config_load(config_path, &config) != 0) {
+                send_response(client, 400, "Bad Request",
+                              "text/plain; charset=utf-8", "Invalid request\n");
+            } else {
+                body += 4;
+                if (!form_value(body, "name", code, sizeof(code))
+                        || announcement_preset_path(code, preset_path,
+                                                    sizeof(preset_path)) != 0) {
+                    send_response(client, 400, "Bad Request",
+                                  "text/plain; charset=utf-8",
+                                  "Could not select preset\n");
+                } else {
+                    snprintf(config.announcement_path,
+                             sizeof(config.announcement_path), "%s", preset_path);
+                    config.announcement_enabled = 1;
+                    if (pb_linux_config_save(config_path, &config) != 0) {
+                        send_response(client, 500, "Internal Server Error",
+                                      "text/plain; charset=utf-8",
+                                      "Could not save announcement setting\n");
+                    } else {
+                        send_response(client, 200, "OK", "application/json",
+                                      "{\"saved\":true}\n");
+                    }
+                }
+            }
+        } else if (strncmp(request, "POST /api/announcement/custom ", 30) == 0) {
+            pb_linux_config_t config;
+            if (pb_linux_config_load(config_path, &config) != 0
+                    || access(config.announcement_custom_path, R_OK) != 0) {
+                send_response(client, 400, "Bad Request",
+                              "text/plain; charset=utf-8",
+                              "No custom announcement is available\n");
+            } else {
+                snprintf(config.announcement_path,
+                         sizeof(config.announcement_path), "%s",
+                         config.announcement_custom_path);
+                config.announcement_enabled = 1;
+                if (pb_linux_config_save(config_path, &config) != 0) {
+                    send_response(client, 500, "Internal Server Error",
+                                  "text/plain; charset=utf-8",
+                                  "Could not save announcement setting\n");
+                } else {
+                    send_response(client, 200, "OK", "application/json",
+                                  "{\"saved\":true}\n");
+                }
+            }
         } else if (strncmp(request, "POST /api/announcement ", 23) == 0) {
             pb_linux_config_t config;
             if (pb_linux_config_load(config_path, &config) != 0
-                    || !config.announcement_path[0]) {
+                    || !config.announcement_custom_path[0]) {
                 send_response(client, 500, "Internal Server Error",
                               "text/plain; charset=utf-8",
-                              "Announcement path is not configured\n");
+                              "Custom announcement path is not configured\n");
             } else {
-                upload_announcement(client, request, length,
-                                    config.announcement_path);
+                int result = upload_announcement(client, request, length,
+                                                 config.announcement_custom_path);
+                if (result == 0) {
+                    snprintf(config.announcement_path,
+                             sizeof(config.announcement_path), "%s",
+                             config.announcement_custom_path);
+                    config.announcement_enabled = 1;
+                    pb_linux_config_save(config_path, &config);
+                }
             }
         } else if (strncmp(request, "POST /api/config ", 17) == 0) {
             char *body = strstr(request, "\r\n\r\n");
@@ -377,9 +549,16 @@ static const char *dashboard_html(void)
         "<label>Advertised port<input name=\"contact_port\" type=\"number\" min=\"0\" max=\"65535\" placeholder=\"leave empty unless behind NAT\"></label>"
         "<div class=\"wide\"><button type=\"submit\">Save configuration</button>"
         "<span id=\"message\" class=\"muted\"></span></div></form></section>"
-        "<section><h2>Announcement upload</h2><p class=\"muted\">Upload raw 8 kHz mono G.711 A-law audio (maximum 30 seconds). Disable playback above to keep the file without using it.</p>"
+        "<section><h2>Pre-recorded announcements</h2><p class=\"muted\">Choose a localized message to play. Your uploaded message remains available.</p>"
+        "<select id=\"announcementPreset\"></select>"
+        "<button id=\"announcementPresetListen\" type=\"button\">Listen</button>"
+        "<button id=\"announcementPresetUse\" type=\"button\">Use selected message</button>"
+        "<span id=\"announcementPresetMessage\" class=\"muted\"></span></section>"
+        "<section><h2>Custom announcement</h2><p class=\"muted\">Upload your own raw 8 kHz mono G.711 A-law audio (maximum 30 seconds), or switch back to it later.</p>"
         "<input id=\"announcementFile\" type=\"file\" accept=\".alaw,audio/basic\">"
+        "<button id=\"announcementListen\" type=\"button\">Listen to custom file</button>"
         "<button id=\"announcementUpload\" type=\"button\">Upload announcement</button>"
+        "<button id=\"announcementCustomUse\" type=\"button\">Use my uploaded message</button>"
         "<span id=\"announcementMessage\" class=\"muted\"></span></section>"
         "<p class=\"muted\">Restart the add-on after changing SIP or announcement settings.</p>"
         "<script>const q=s=>document.querySelector(s);async function load(){"
@@ -402,8 +581,26 @@ static const char *dashboard_html(void)
         "q('#announcementUpload').onclick=async()=>{const f=q('#announcementFile').files[0],m=q('#announcementMessage');"
         "if(!f){m.textContent='Choose an .alaw file first';return;}if(f.size>245760){m.textContent='File is larger than 30 seconds';return;}"
         "m.textContent='Uploading...';const r=await fetch('/api/announcement',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:await f.arrayBuffer()});"
-        "m.textContent=r.ok?'Announcement saved.':'Upload failed';};"
+        "m.textContent=r.ok?'Uploaded and selected for playback.':'Upload failed';};"
         "q('#announcementFile').addEventListener('change',()=>q('#announcementMessage').textContent='');"
+        "function playAlaw(bytes){const context=new (window.AudioContext||window.webkitAudioContext)();"
+        "const buffer=context.createBuffer(1,bytes.length,8000),samples=buffer.getChannelData(0);"
+        "for(let i=0;i<bytes.length;i++){let a=bytes[i]^85,s=a&128,e=(a>>4)&7,m=a&15;"
+        "let v=e===0?(m<<4)+8:((m<<4)+264)<<(e-1);samples[i]=(s?-v:v)/32768;}"
+        "const source=context.createBufferSource();source.buffer=buffer;source.connect(context.destination);"
+        "source.onended=()=>context.close();source.start();}"
+        "async function loadPresets(){const d=await fetch('/api/announcement/catalog').then(r=>r.json()),s=q('#announcementPreset');"
+        "for(const p of d.presets){const o=document.createElement('option');o.value=p.code;o.textContent=p.label;s.appendChild(o);}}"
+        "q('#announcementPresetListen').onclick=async()=>{const c=q('#announcementPreset').value;"
+        "playAlaw(new Uint8Array(await (await fetch('/api/announcement/preset?name='+c)).arrayBuffer()));};"
+        "q('#announcementPresetUse').onclick=async()=>{const c=q('#announcementPreset').value,m=q('#announcementPresetMessage');"
+        "const r=await fetch('/api/announcement/select',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'name='+c});"
+        "m.textContent=r.ok?'Selected. Your custom message is preserved. Restart the add-on to apply it.':'Selection failed';};"
+        "q('#announcementCustomUse').onclick=async()=>{const m=q('#announcementMessage');"
+        "const r=await fetch('/api/announcement/custom',{method:'POST'});"
+        "m.textContent=r.ok?'Your uploaded message is selected. Restart the add-on to apply it.':'No custom message available';};"
+        "q('#announcementListen').onclick=async()=>{const f=q('#announcementFile').files[0];if(f)playAlaw(new Uint8Array(await f.arrayBuffer()));};"
+        "loadPresets().catch(()=>{});"
         "load().catch(()=>q('#status').textContent='Unable to load status');</script>"
         "</body></html>";
 }

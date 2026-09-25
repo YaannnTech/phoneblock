@@ -27,7 +27,17 @@ struct pb_mutex {
 static void pb_log(const char *level, const char *tag, const char *fmt,
                    va_list args)
 {
-    fprintf(stderr, "%s (%s): ", level, tag ? tag : "phoneblock");
+    struct timespec now;
+    struct tm local_now;
+    char timestamp[32] = "";
+    memset(&now, 0, sizeof(now));
+    if (clock_gettime(CLOCK_REALTIME, &now) == 0
+            && localtime_r(&now.tv_sec, &local_now) != NULL) {
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
+                 &local_now);
+    }
+    fprintf(stderr, "%s %s (%s): ", timestamp[0] ? timestamp : "unknown-time",
+            level, tag ? tag : "phoneblock");
     vfprintf(stderr, fmt, args);
     fputc('\n', stderr);
 }

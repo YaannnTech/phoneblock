@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t shutdown_requested;
@@ -51,6 +52,19 @@ static const char *default_config_path(void)
         snprintf(path, sizeof(path), "/etc/phoneblock/dongle.conf");
     }
     return path;
+}
+
+static void log_timezone(void)
+{
+    time_t current_time = time(NULL);
+    struct tm local_time;
+    char timezone[32] = "";
+    if (current_time != (time_t)-1
+            && localtime_r(&current_time, &local_time) != NULL) {
+        strftime(timezone, sizeof(timezone), "%Z (%z)", &local_time);
+    }
+    pb_log_info("linux", "local timezone: %s",
+                timezone[0] ? timezone : "unknown");
 }
 
 static void print_usage(const char *program)
@@ -115,6 +129,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     pb_log_info("linux", "configuration loaded from %s", config_path);
+    log_timezone();
     pb_log_info("linux", "SIP registrar %s:%d, local SIP port %d, RTP port %d",
                 config.sip_host[0] ? config.sip_host : "<unset>",
                 config.sip_port, config.sip_local_port, config.rtp_port);

@@ -23,6 +23,7 @@ void pb_linux_config_defaults(pb_linux_config_t *config)
                "https://phoneblock.net/phoneblock");
     copy_value(config->announcement_path, sizeof(config->announcement_path),
                "/usr/share/phoneblock/announcement.alaw");
+    config->announcement_enabled = 1;
     copy_value(config->fritzbox_host, sizeof(config->fritzbox_host), "fritz.box");
     config->fritzbox_port = 49000;
     copy_value(config->fritzbox_phone_name, sizeof(config->fritzbox_phone_name),
@@ -95,6 +96,8 @@ int pb_linux_config_load(const char *path, pb_linux_config_t *config)
                                                config->rtp_port, 1, 65535);
     config->contact_port = pb_config_file_get_int(&file, "contact_port",
                                                    config->contact_port, 0, 65535);
+    config->announcement_enabled = pb_config_file_get_int(
+        &file, "announcement_enabled", config->announcement_enabled, 0, 1);
     config->fritzbox_port = pb_config_file_get_int(&file, "fritzbox_port",
                                                     config->fritzbox_port, 1, 65535);
     return 0;
@@ -143,6 +146,8 @@ int pb_linux_config_save(const char *path, const pb_linux_config_t *config)
     if (pb_config_file_set(&file, "rtp_port", number) != 0) return -1;
     snprintf(number, sizeof(number), "%d", config->contact_port);
     if (pb_config_file_set(&file, "contact_port", number) != 0) return -1;
+    snprintf(number, sizeof(number), "%d", config->announcement_enabled);
+    if (pb_config_file_set(&file, "announcement_enabled", number) != 0) return -1;
     snprintf(number, sizeof(number), "%d", config->fritzbox_port);
     if (pb_config_file_set(&file, "fritzbox_port", number) != 0) return -1;
     return pb_config_file_save(path, &file);

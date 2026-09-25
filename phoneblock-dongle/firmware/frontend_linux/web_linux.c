@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define ANNOUNCEMENT_MAX_BYTES (240U * 1024U)
+
 static int send_response(int client, int status, const char *reason,
                          const char *content_type, const char *body)
 {
@@ -34,6 +36,76 @@ static void copy_form_string(const char *body, const char *key,
                              char *destination, size_t capacity);
 static int form_int(const char *body, const char *key, int current);
 static const char *dashboard_html(void);
+
+static int upload_announcement(int client, const char *request,
+                               ssize_t request_length, const char *path)
+{
+    const char *header_end = strstr(request, "\r\n\r\n");
+    const char *content_length_header = strstr(request, "Content-Length:");
+    if (!header_end || !content_length_header
+            || content_length_header > header_end) {
+        return send_response(client, 400, "Bad Request",
+                             "text/plain; charset=utf-8",
+                             "Content-Length is required\n");
+    }
+
+    unsigned long content_length = strtoul(content_length_header + 15, NULL, 10);
+    if (content_length == 0 || content_length > ANNOUNCEMENT_MAX_BYTES) {
+        return send_response(client, 400, "Bad Request",
+                             "text/plain; charset=utf-8",
+                             "Announcement is empty or too large\n");
+    }
+
+    char temporary_path[512];
+    int path_length = snprintf(temporary_path, sizeof(temporary_path),
+                               "%s.tmp", path);
+    if (path_length < 0 || (size_t)path_length >= sizeof(temporary_path)) {
+        return send_response(client, 400, "Bad Request",
+                             "text/plain; charset=utf-8", "Path is too long\n");
+    }
+
+    FILE *output = fopen(temporary_path, "wb");
+    if (!output) {
+        return send_response(client, 500, "Internal Server Error",
+                             "text/plain; charset=utf-8",
+                             "Could not open announcement file\n");
+    }
+
+    size_t header_length = (size_t)(header_end + 4 - request);
+    size_t received = request_length > (ssize_t)header_length
+        ? (size_t)request_length - header_length : 0;
+    if (received > content_length) received = content_length;
+    if (received > 0
+            && fwrite(request + header_length, 1, received, output) != received) {
+        fclose(output);
+        unlink(temporary_path);
+        return send_response(client, 500, "Internal Server Error",
+                             "text/plain; charset=utf-8", "Write failed\n");
+    }
+
+    char buffer[8192];
+    while (received < content_length) {
+        size_t wanted = content_length - received;
+        if (wanted > sizeof(buffer)) wanted = sizeof(buffer);
+        ssize_t count = recv(client, buffer, wanted, 0);
+        if (count <= 0 || fwrite(buffer, 1, (size_t)count, output) != (size_t)count) {
+            fclose(output);
+            unlink(temporary_path);
+            return send_response(client, 400, "Bad Request",
+                                 "text/plain; charset=utf-8",
+                                 "Upload interrupted\n");
+        }
+        received += (size_t)count;
+    }
+
+    if (fclose(output) != 0 || rename(temporary_path, path) != 0) {
+        unlink(temporary_path);
+        return send_response(client, 500, "Internal Server Error",
+                             "text/plain; charset=utf-8", "Could not save announcement\n");
+    }
+    return send_response(client, 200, "OK", "application/json",
+                         "{\"saved\":true}\n");
+}
 
 int pb_linux_web_serve(int port, const char *bind_host,
                        const char *sip_host, int sip_port,
@@ -116,12 +188,25 @@ int pb_linux_web_serve(int port, const char *bind_host,
                 snprintf(body, sizeof(body),
                          "{\"sip_host\":\"%s\",\"sip_port\":%d,\"sip_user\":\"%s\","
                          "\"sip_local_port\":%d,\"rtp_port\":%d,\"phoneblock_base_url\":\"%s\","
-                         "\"contact_host\":\"%s\",\"contact_port\":%d}\n",
+                         "\"contact_host\":\"%s\",\"contact_port\":%d,"
+                         "\"announcement_path\":\"%s\",\"announcement_enabled\":%d}\n",
                          config.sip_host, config.sip_port, config.sip_user,
                          config.sip_local_port, config.rtp_port,
                          config.phoneblock_base_url,
-                         config.contact_host, config.contact_port);
+                         config.contact_host, config.contact_port,
+                         config.announcement_path, config.announcement_enabled);
                 send_response(client, 200, "OK", "application/json", body);
+            }
+        } else if (strncmp(request, "POST /api/announcement ", 23) == 0) {
+            pb_linux_config_t config;
+            if (pb_linux_config_load(config_path, &config) != 0
+                    || !config.announcement_path[0]) {
+                send_response(client, 500, "Internal Server Error",
+                              "text/plain; charset=utf-8",
+                              "Announcement path is not configured\n");
+            } else {
+                upload_announcement(client, request, length,
+                                    config.announcement_path);
             }
         } else if (strncmp(request, "POST /api/config ", 17) == 0) {
             char *body = strstr(request, "\r\n\r\n");
@@ -145,6 +230,10 @@ int pb_linux_web_serve(int port, const char *bind_host,
                                  sizeof(new_token));
                 copy_form_string(body, "contact_host", config.contact_host,
                                  sizeof(config.contact_host));
+                copy_form_string(body, "announcement_path", config.announcement_path,
+                                 sizeof(config.announcement_path));
+                config.announcement_enabled = form_int(
+                    body, "announcement_enabled", config.announcement_enabled);
                 config.sip_port = form_int(body, "sip_port", config.sip_port);
                 config.sip_local_port = form_int(body, "sip_local_port", config.sip_local_port);
                 config.rtp_port = form_int(body, "rtp_port", config.rtp_port);
@@ -282,14 +371,20 @@ static const char *dashboard_html(void)
         "<label>RTP port<input name=\"rtp_port\" type=\"number\"></label>"
         "<label class=\"wide\">PhoneBlock API URL<input name=\"phoneblock_base_url\"></label>"
         "<label class=\"wide\">PhoneBlock token<input name=\"phoneblock_token\" type=\"password\" placeholder=\"unchanged\"></label>"
+        "<label class=\"wide\">Announcement path<input name=\"announcement_path\" placeholder=\"/data/announcement.alaw\"></label>"
+        "<label><input name=\"announcement_enabled\" type=\"checkbox\" value=\"1\"> Enable announcement playback</label>"
         "<label>Advertised host (NAT/routed setups)<input name=\"contact_host\" placeholder=\"leave empty unless behind NAT\"></label>"
         "<label>Advertised port<input name=\"contact_port\" type=\"number\" min=\"0\" max=\"65535\" placeholder=\"leave empty unless behind NAT\"></label>"
         "<div class=\"wide\"><button type=\"submit\">Save configuration</button>"
         "<span id=\"message\" class=\"muted\"></span></div></form></section>"
-        "<p class=\"muted\">Restart the add-on after changing SIP settings.</p>"
+        "<section><h2>Announcement upload</h2><p class=\"muted\">Upload raw 8 kHz mono G.711 A-law audio (maximum 30 seconds). Disable playback above to keep the file without using it.</p>"
+        "<input id=\"announcementFile\" type=\"file\" accept=\".alaw,audio/basic\">"
+        "<button id=\"announcementUpload\" type=\"button\">Upload announcement</button>"
+        "<span id=\"announcementMessage\" class=\"muted\"></span></section>"
+        "<p class=\"muted\">Restart the add-on after changing SIP or announcement settings.</p>"
         "<script>const q=s=>document.querySelector(s);async function load(){"
         "const c=await fetch('/api/config').then(r=>r.json());for(const [k,v] of Object.entries(c)){"
-        "const e=q('[name=\\\"'+k+'\\\"]');if(e)e.value=v||'';}const s=await fetch('/api/status').then(r=>r.json());"
+        "const e=q('[name=\\\"'+k+'\\\"]');if(e){if(e.type==='checkbox')e.checked=!!v;else e.value=v||'';}}const s=await fetch('/api/status').then(r=>r.json());"
         "q('#status').textContent=s.registered?'SIP registration: registered':'SIP registration: not registered';"
         "q('#status').className=s.registered?'ok':'error';q('#details').innerHTML="
         "'Registrar: '+s.sipHost+':'+s.sipPort+'<br>SIP user: '+s.sipUser+"
@@ -297,10 +392,18 @@ static const char *dashboard_html(void)
         "'<br>Local SIP port: '+s.localSipPort+' | RTP port: '+s.rtpPort;"
         "q('#stats').innerHTML='Calls: '+s.calls+'<br>Spam blocked: '+s.spamBlocked+"
         "'<br>Calls passed: '+s.callsPassed+'<br>Classification errors: '+s.classificationErrors; }"
-        "q('#form').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/config',{method:'POST',"
-        "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});"
+        "q('#form').onsubmit=async e=>{e.preventDefault();const formData=new FormData(e.target);"
+        "formData.set('announcement_enabled',q('[name=announcement_enabled]').checked?'1':'0');"
+        "const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},"
+        "body:new URLSearchParams(formData)});"
         "const text=await r.text();const m=q('#message');m.textContent=r.ok?"
         "'Saved. Restart the add-on to apply changes.':(text||'Save failed');"
-        "m.className=r.ok?'ok':'error';};load().catch(()=>q('#status').textContent='Unable to load status');</script>"
+        "m.className=r.ok?'ok':'error';};"
+        "q('#announcementUpload').onclick=async()=>{const f=q('#announcementFile').files[0],m=q('#announcementMessage');"
+        "if(!f){m.textContent='Choose an .alaw file first';return;}if(f.size>245760){m.textContent='File is larger than 30 seconds';return;}"
+        "m.textContent='Uploading...';const r=await fetch('/api/announcement',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:await f.arrayBuffer()});"
+        "m.textContent=r.ok?'Announcement saved.':'Upload failed';};"
+        "q('#announcementFile').addEventListener('change',()=>q('#announcementMessage').textContent='');"
+        "load().catch(()=>q('#status').textContent='Unable to load status');</script>"
         "</body></html>";
 }

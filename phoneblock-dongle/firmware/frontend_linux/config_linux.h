@@ -24,6 +24,7 @@ typedef struct {
     char phoneblock_base_url[128];
     char phoneblock_token[128];
     char announcement_path[256];
+    int announcement_enabled;
     char fritzbox_host[128];
     int fritzbox_port;
     char fritzbox_admin_user[64];

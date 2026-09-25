@@ -31,9 +31,15 @@ static void request_path(const char *path, char *response, size_t capacity)
     assert(connect(client, (struct sockaddr *)&address, sizeof(address)) == 0);
     int request_length = snprintf(response, capacity, "GET %s HTTP/1.1\r\n\r\n", path);
     assert(send(client, response, (size_t)request_length, 0) == request_length);
-    ssize_t length = recv(client, response, capacity - 1, 0);
-    assert(length > 0);
-    response[length] = '\0';
+    size_t received = 0;
+    ssize_t length;
+    while (received + 1 < capacity
+            && (length = recv(client, response + received,
+                              capacity - received - 1, 0)) > 0) {
+        received += (size_t)length;
+    }
+    assert(received > 0);
+    response[received] = '\0';
     close(client);
 }
 
@@ -79,13 +85,16 @@ int main(void)
 
     pthread_t thread;
     assert(pthread_create(&thread, NULL, server_thread, NULL) == 0);
-    char response[2048];
+    char response[16384];
     request_path("/health", response, sizeof(response));
     assert(strstr(response, "200 OK") != NULL);
     assert(strstr(response, "ok\n") != NULL);
     request_path("/", response, sizeof(response));
     assert(strstr(response, "200 OK") != NULL);
     assert(strstr(response, "PhoneBlock Dongle") != NULL);
+    assert(strstr(response, "fetch('api/config')") != NULL);
+    assert(strstr(response, "fetch('/api/config')") == NULL);
+    assert(strstr(response, "href=\"api/status\"") != NULL);
     request_path("/api/status", response, sizeof(response));
     assert(strstr(response, "\"sipHost\":\"fritz.box\"") != NULL);
     post_config(response, sizeof(response));
